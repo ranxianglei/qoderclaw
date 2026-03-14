@@ -191,7 +191,8 @@ class BridgeCore:
         def on_chunk(chunk: str):
             accumulated[0] += chunk
             new_len = len(accumulated[0])
-            if new_len - last_update_len[0] >= update_interval:
+            # 每 8 字符更新一次，或者如果这是第一个字符也更新（让用户立即看到响应）
+            if new_len - last_update_len[0] >= update_interval or new_len <= 2:
                 last_update_len[0] = new_len
                 text = accumulated[0].strip()
                 if text:

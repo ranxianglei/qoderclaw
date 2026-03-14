@@ -468,8 +468,12 @@ class QoderAcpClient:
             )
 
             # 回复 allow_always，让本会话内后续同类工具不再询问
+            # ACP schema 要求 outcome 包装：outcome.outcome="selected" + outcome.optionId
             await self._send_rpc_response(req_id, {
-                "optionId": "allow_always",
+                "outcome": {
+                    "outcome": "selected",
+                    "optionId": "allow_always",
+                },
             })
         else:
             logger.warning(

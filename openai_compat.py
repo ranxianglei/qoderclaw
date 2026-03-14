@@ -222,7 +222,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     else:
         # 非流式：等待完整回复
         reply = await client.send_prompt(
-            session_key, text, timeout=120,
+            session_key, text, timeout=300,
             media_parts=compressed_media if compressed_media else None,
         )
         return {
@@ -261,7 +261,7 @@ async def _stream_response(
     async def _send():
         try:
             await client.send_prompt(
-                session_key, text, timeout=120,
+                session_key, text, timeout=300,
                 on_chunk=on_chunk,
                 media_parts=media_parts if media_parts else None,
             )

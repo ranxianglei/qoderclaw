@@ -244,7 +244,7 @@ class QoderAcpClient:
         self,
         conversation_key: str,
         text: str,
-        timeout: float = 120,
+        timeout: float = 300,
         on_chunk: Optional[Callable[[str], None]] = None,
         media_parts: Optional[List[dict]] = None,
     ) -> Optional[str]:
@@ -391,8 +391,20 @@ class QoderAcpClient:
                     logger.debug(f"[{self.config.name}] 非JSON输出: {text[:100]}")
                     continue
 
-                # JSON-RPC 响应（有 id 字段）
-                if "id" in msg and msg["id"] is not None:
+                # 区分三种消息类型：
+                # 1. 来自 Qoder 的请求（有 id + method）→ 需要回复
+                # 2. 我方请求的响应（有 id，无 method）→ 匹配 pending future
+                # 3. 通知（无 id，有 method）→ 处理通知
+                has_id = "id" in msg and msg["id"] is not None
+                has_method = "method" in msg
+
+                # 来自 Qoder 的请求（如 session/request_permission）
+                if has_id and has_method:
+                    await self._handle_incoming_request(msg)
+                    continue
+
+                # JSON-RPC 响应（有 id 字段，无 method）
+                if has_id:
                     req_id = msg["id"]
                     future = self._pending.pop(req_id, None)
                     if future and not future.done():
@@ -405,7 +417,7 @@ class QoderAcpClient:
                     continue
 
                 # JSON-RPC 通知（无 id，有 method）
-                if "method" in msg:
+                if has_method:
                     self._handle_notification(msg)
 
         except asyncio.CancelledError:
@@ -437,6 +449,52 @@ class QoderAcpClient:
             pass
         except Exception:
             pass
+
+    async def _handle_incoming_request(self, msg: dict) -> None:
+        """处理来自 Qoder 的 JSON-RPC 请求（如权限确认）"""
+        method = msg.get("method", "")
+        req_id = msg["id"]
+        params = msg.get("params", {})
+
+        if method == "session/request_permission":
+            # 自动批准所有工具执行请求（类似 --yolo 模式）
+            tool_call = params.get("toolCall", {})
+            title = tool_call.get("title", "unknown")
+            tool_name = params.get("_meta", {}).get("ai-coding/tool-name", "unknown")
+
+            logger.info(
+                f"[{self.config.name}] 自动批准工具执行: "
+                f"{tool_name} - {title}"
+            )
+
+            # 回复 allow_always，让本会话内后续同类工具不再询问
+            await self._send_rpc_response(req_id, {
+                "optionId": "allow_always",
+            })
+        else:
+            logger.warning(
+                f"[{self.config.name}] 收到未知请求: {method} (id={req_id})"
+            )
+
+    async def _send_rpc_response(self, req_id: int, result: dict) -> None:
+        """向 Qoder 发送 JSON-RPC 响应"""
+        if not self.process or self.process.returncode is not None:
+            logger.error(f"[{self.config.name}] 进程未运行，无法发送响应")
+            return
+
+        msg = json.dumps({
+            "jsonrpc": "2.0",
+            "id": req_id,
+            "result": result,
+        }, ensure_ascii=False)
+
+        async with self._lock:
+            try:
+                self.process.stdin.write((msg + "\n").encode("utf-8"))
+                await self.process.stdin.drain()
+                logger.debug(f"[{self.config.name}] 已发送响应: id={req_id}")
+            except Exception as e:
+                logger.error(f"[{self.config.name}] 发送响应失败: {e}")
 
     def _handle_notification(self, msg: dict) -> None:
         """处理 ACP 通知消息"""

@@ -25,6 +25,7 @@ from adapters.base import (
     User,
     BotStatus,
     HealthStatus,
+    MediaAttachment,
 )
 
 
@@ -55,6 +56,12 @@ class FeishuBotAdapter(BaseBotAdapter):
         self._seen_messages: Dict[str, float] = {}
         self._dedup_ttl_ms = 12 * 60 * 60 * 1000  # 12 小时
 
+        # 持久化 HTTP 客户端（避免每次请求创建新连接）
+        self._http_client: Optional[httpx.AsyncClient] = None
+
+        # 主事件循环引用（用于从 WebSocket 线程投递消息）
+        self._main_loop: Optional[asyncio.AbstractEventLoop] = None
+
     # -------------------------------------------------------------------------
     # 生命周期
     # -------------------------------------------------------------------------
@@ -64,6 +71,9 @@ class FeishuBotAdapter(BaseBotAdapter):
         try:
             self.status = BotStatus.CONNECTING
             logger.info(f"[{self.bot_id}] 正在启动飞书 WebSocket 连接...")
+
+            # 记录主事件循环，后续从 WS 线程投递消息时使用
+            self._main_loop = asyncio.get_running_loop()
 
             # 获取 access token，同时验证凭证是否正确
             await self._refresh_access_token()
@@ -129,6 +139,9 @@ class FeishuBotAdapter(BaseBotAdapter):
                 self._ws_client.stop()
             except Exception:
                 pass
+        if self._http_client:
+            await self._http_client.aclose()
+            self._http_client = None
         logger.info(f"[{self.bot_id}] 已停止")
 
     # -------------------------------------------------------------------------
@@ -235,6 +248,50 @@ class FeishuBotAdapter(BaseBotAdapter):
             logger.error(f"[{self.bot_id}] 发送卡片异常：{e}")
             return None
 
+    async def _get_http_client(self) -> httpx.AsyncClient:
+        """获取或创建持久化 HTTP 客户端"""
+        if self._http_client is None or self._http_client.is_closed:
+            self._http_client = httpx.AsyncClient(timeout=5)
+        return self._http_client
+
+    async def download_message_resource(
+        self,
+        message_id: str,
+        file_key: str,
+        resource_type: str = "file",
+    ) -> Optional[bytes]:
+        """
+        下载飞书消息资源（图片、语音、文件等）
+
+        Args:
+            message_id: 消息 ID
+            file_key: 资源 key（image_key 或 file_key）
+            resource_type: "image" 或 "file"
+
+        Returns:
+            资源的二进制数据，失败返回 None
+        """
+        try:
+            await self._ensure_access_token()
+
+            url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}/resources/{file_key}"
+            headers = {
+                "Authorization": f"Bearer {self._access_token}",
+            }
+            params = {"type": resource_type}
+
+            async with httpx.AsyncClient(timeout=30) as client:
+                resp = await client.get(url, headers=headers, params=params)
+                if resp.status_code == 200:
+                    return resp.content
+                else:
+                    logger.error(f"[{self.bot_id}] 下载资源失败: {resp.status_code} {resp.text[:200]}")
+                    return None
+
+        except Exception as e:
+            logger.error(f"[{self.bot_id}] 下载资源异常: {e}")
+            return None
+
     async def update_card_message(self, message_id: str, content: str, title: str = "") -> bool:
         """更新卡片消息内容（用于流式输出）"""
         try:
@@ -251,18 +308,27 @@ class FeishuBotAdapter(BaseBotAdapter):
                 "content": json.dumps(card),
             }
 
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.patch(url, headers=headers, json=payload)
-                result = resp.json()
+            logger.debug(f"[{self.bot_id}] PATCH 开始请求 len={len(content)}")
+            client = await self._get_http_client()
+            resp = await client.patch(url, headers=headers, json=payload)
+            result = resp.json()
 
             if result.get("code") == 0:
+                logger.debug(f"[{self.bot_id}] PATCH 成功 len={len(content)}")
                 return True
             else:
-                logger.debug(f"[{self.bot_id}] 更新卡片失败：{result.get('msg')}")
+                logger.warning(f"[{self.bot_id}] PATCH 失败：code={result.get('code')} msg={result.get('msg')} len={len(content)}")
                 return False
 
         except Exception as e:
             logger.error(f"[{self.bot_id}] 更新卡片异常：{e}")
+            # 客户端可能坏了，重置
+            if self._http_client:
+                try:
+                    await self._http_client.aclose()
+                except Exception:
+                    pass
+                self._http_client = None
             return False
 
     def _build_card(self, content: str, title: str = "") -> dict:
@@ -374,18 +440,89 @@ class FeishuBotAdapter(BaseBotAdapter):
                 logger.debug(f"[{self.bot_id}] 消息已过期，跳过：{msg_id}")
                 return
 
-            # 解析消息内容
+            # 解析消息内容和类型
+            # 飞书 SDK 使用 message_type 属性
+            msg_type = getattr(msg, 'message_type', None)
+            if msg_type is None:
+                # 尝试从 content JSON 推断
+                try:
+                    content_json = json.loads(msg.content or "{}")
+                    # 飞书消息类型可能通过 content 结构推断
+                    if 'image_key' in content_json:
+                        msg_type = 'image'
+                    elif 'file_key' in content_json and 'duration' in content_json:
+                        msg_type = 'audio'
+                    elif 'file_key' in content_json:
+                        msg_type = 'media'
+                    else:
+                        msg_type = 'text'
+                except Exception:
+                    msg_type = 'text'
+
+            content_json = {}
+            text = ""
+            media_list = []
+
             try:
                 content_json = json.loads(msg.content or "{}")
+            except Exception:
+                pass
+
+            # 根据消息类型解析
+            if msg_type == "text":
                 text = content_json.get("text", "").strip()
                 # 去掉 @机器人 的部分
                 if "@" in text:
                     import re
                     text = re.sub(r"@\S+\s*", "", text).strip()
-            except Exception:
-                text = msg.content or ""
 
-            if not text:
+            elif msg_type == "image":
+                # 图片消息
+                image_key = content_json.get("image_key", "")
+                if image_key:
+                    text = "[图片]"
+                    media_list.append(MediaAttachment(
+                        type="image",
+                        file_key=image_key,
+                    ))
+                else:
+                    text = "[图片]"
+
+            elif msg_type == "audio":
+                # 语音消息
+                file_key = content_json.get("file_key", "")
+                duration = content_json.get("duration", 0)
+                if file_key:
+                    text = f"[语音 {duration // 1000}秒]"
+                    media_list.append(MediaAttachment(
+                        type="audio",
+                        file_key=file_key,
+                        duration=duration,
+                    ))
+                else:
+                    text = "[语音]"
+
+            elif msg_type == "media":
+                # 文件/视频消息
+                file_key = content_json.get("file_key", "")
+                file_name = content_json.get("file_name", "")
+                if file_key:
+                    text = f"[文件: {file_name}]" if file_name else "[文件]"
+                    media_list.append(MediaAttachment(
+                        type="file",
+                        file_key=file_key,
+                        filename=file_name,
+                    ))
+                else:
+                    text = "[文件]"
+
+            else:
+                # 其他类型，尝试提取文本
+                text = content_json.get("text", "").strip()
+                if not text:
+                    text = f"[{msg_type}]"
+
+            if not text and not media_list:
                 return
 
             # 构建统一消息对象
@@ -395,31 +532,44 @@ class FeishuBotAdapter(BaseBotAdapter):
                 platform="feishu",
             )
 
+            # 确定消息类型
+            if media_list:
+                if media_list[0].type == "image":
+                    msg_type_enum = MessageType.IMAGE
+                elif media_list[0].type == "audio":
+                    msg_type_enum = MessageType.AUDIO
+                else:
+                    msg_type_enum = MessageType.FILE
+            else:
+                msg_type_enum = MessageType.TEXT
+
             unified_message = Message(
                 id=msg_id,
                 content=text,
-                type=MessageType.TEXT,
+                type=msg_type_enum,
                 sender=user,
                 conversation_id=msg.chat_id or "",
                 timestamp=create_time / 1000 if create_time else time.time(),
                 is_group=msg.chat_type == "group",
                 raw_data={"event": str(event)},
+                media=media_list,
             )
 
             logger.info(
                 f"[{self.bot_id}] 收到消息 | "
                 f"chat={unified_message.conversation_id} | "
-                f"text={text[:50]!r}"
+                f"type={msg_type} | "
+                f"text={text[:50]!r} | "
+                f"media={len(media_list)}"
             )
 
             # 把消息投递到 asyncio 事件循环
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
+            if self._main_loop and self._main_loop.is_running():
                 asyncio.run_coroutine_threadsafe(
-                    self.handle_incoming_message(unified_message), loop
+                    self.handle_incoming_message(unified_message), self._main_loop
                 )
             else:
-                asyncio.run(self.handle_incoming_message(unified_message))
+                logger.warning(f"[{self.bot_id}] 主事件循环不可用，无法投递消息")
 
         except Exception as e:
             logger.error(f"[{self.bot_id}] 处理消息事件异常：{e}", exc_info=True)

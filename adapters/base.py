@@ -15,6 +15,7 @@ class MessageType(Enum):
     """消息类型枚举"""
     TEXT = "text"
     IMAGE = "image"
+    AUDIO = "audio"
     FILE = "file"
     LINK = "link"
     CARD = "card"  # 富文本卡片
@@ -40,6 +41,17 @@ class User:
 
 
 @dataclass
+class MediaAttachment:
+    """媒体附件"""
+    type: str  # "image", "audio", "file"
+    file_key: str  # 飞书的 file_key 或 image_key
+    data: Optional[bytes] = None  # 下载后的二进制数据
+    content_type: Optional[str] = None  # MIME 类型
+    filename: Optional[str] = None
+    duration: Optional[int] = None  # 音频时长（毫秒）
+
+
+@dataclass
 class Message:
     """统一消息对象"""
     id: str = field(default_factory=lambda: str(uuid.uuid4()))
@@ -50,12 +62,15 @@ class Message:
     conversation_id: str = ""  # 会话 ID（群聊或私聊）
     timestamp: float = field(default_factory=time.time)
     raw_data: Dict[str, Any] = field(default_factory=dict)
-    
+
     # 元数据
     is_group: bool = False
     mentions: List[str] = field(default_factory=list)
     reply_to: Optional[str] = None  # 回复的消息 ID
-    
+
+    # 媒体附件
+    media: List[MediaAttachment] = field(default_factory=list)
+
     # 扩展字段（用于传递平台特定信息）
     extras: Dict[str, Any] = field(default_factory=dict)
 

@@ -246,12 +246,15 @@ class QoderAcpClient:
         text: str,
         timeout: float = 120,
         on_chunk: Optional[Callable[[str], None]] = None,
+        media_parts: Optional[List[dict]] = None,
     ) -> Optional[str]:
         """
         向指定会话发送消息并等待完整回复。
 
         Args:
+            text: 文本内容
             on_chunk: 可选回调，每收到一个文本块立即调用（用于流式输出）
+            media_parts: 可选的多模态内容块列表，格式如 [{"type": "image", "data": bytes, "mime": "image/png"}, ...]
 
         返回 AI 的完整文本回复，超时或失败返回 None。
         """
@@ -264,10 +267,34 @@ class QoderAcpClient:
         if on_chunk:
             self._prompt_callbacks[req_id] = on_chunk
 
+        # 构建 prompt 内容
+        prompt_content = []
+
+        # 添加多模态内容（ACP 扁平格式）
+        if media_parts:
+            import base64
+            for part in media_parts:
+                if part.get("type") == "image" and part.get("data"):
+                    b64_data = base64.b64encode(part["data"]).decode("utf-8")
+                    mime = part.get("mime", "image/png")
+                    prompt_content.append({
+                        "type": "image",
+                        "mimeType": mime,
+                        "data": b64_data,
+                    })
+                    logger.debug(
+                        f"[{self.config.name}] 图片已编码: "
+                        f"mime={mime} raw={len(part['data'])}B b64={len(b64_data)}B"
+                    )
+
+        # 添加文本内容
+        if text:
+            prompt_content.append({"type": "text", "text": text})
+
         try:
             resp = await self._rpc_call("session/prompt", {
                 "sessionId": session_id,
-                "prompt": [{"type": "text", "text": text}],
+                "prompt": prompt_content,
             }, timeout=timeout)
 
             self._prompt_callbacks.pop(req_id, None)
@@ -322,7 +349,7 @@ class QoderAcpClient:
             }, ensure_ascii=False)
 
             # 创建 Future
-            loop = asyncio.get_event_loop()
+            loop = asyncio.get_running_loop()
             future = loop.create_future()
             self._pending[req_id] = future
 
@@ -426,9 +453,16 @@ class QoderAcpClient:
                 if isinstance(content, dict) and content.get("type") == "text":
                     chunk_text = content.get("text", "")
                     if chunk_text:
+                        chunk_time = time.time()
                         # 找到正在等待的 prompt 请求，追加文本并调用回调
                         for req_id in list(self._prompt_texts.keys()):
                             self._prompt_texts[req_id].append(chunk_text)
+                            total = "".join(self._prompt_texts[req_id])
+                            logger.debug(
+                                f"[{self.config.name}] chunk @{chunk_time:.3f} "
+                                f"len={len(chunk_text)} total={len(total)} "
+                                f"text={chunk_text!r}"
+                            )
                             callback = self._prompt_callbacks.get(req_id)
                             if callback:
                                 try:

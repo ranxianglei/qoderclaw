@@ -1,5 +1,5 @@
 # 飞书开放平台 SDK
-lark-oapi>=2.0.0
+lark-oapi==1.5.3
 
 # Web 框架
 fastapi>=0.109.0
@@ -22,6 +22,9 @@ httpx>=0.26.0
 
 # 会话存储
 redis>=5.0.0
+
+# 图片处理
+Pillow>=10.0.0
 
 # 工具库
 python-multipart>=0.0.6

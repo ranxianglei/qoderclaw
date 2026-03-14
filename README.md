@@ -4,26 +4,33 @@
 
 **无需公网 IP**，使用飞书 WebSocket 长连接主动接收消息，和 OpenClaw 原理相同。
 
+## 功能特性
+
+- **流式输出**：实时显示 AI 回复，打字机效果
+- **多模态支持**：
+  - 图片：自动压缩后发送给 Qoder 识别
+  - 语音：降级为文本提示（Qoder 暂不支持音频）
+- **多实例管理**：每个飞书 Bot 对应独立的 Qoder 进程
+- **控制命令**：`/help`、`/status`、`/restart`、`/forget` 等
+
 ## 架构
 
 ```
 飞书用户
-   ↕  消息
+   ↕  消息（文字/图片/语音）
 飞书服务器
    ↕  WebSocket（本服务主动连接，无需公网 IP）
 Qoder Bridge  ──────────────────────────────────
-   ↕  stdin/stdout               REST API (8080)
-Qoder 进程                    管理/健康检查/控制
+   ↕  stdin/stdout (ACP协议)      REST API (8080)
+Qoder 进程                       管理/健康检查/控制
 ```
-
-多机器人场景：每个飞书 Bot 对应一个独立的 Qoder 进程，互不干扰。
 
 ## 快速开始
 
 ### 1. 安装
 
 ```bash
-cd /home/dog/apps/qoder-bridge
+cd /home/dog/qoder-bridge
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -46,19 +53,28 @@ qoder_instances:
   default-assistant:
     name: "default-assistant"
     workdir: "/home/dog"
-    cmd: "qoder"
+    cmd: "qodercli"
     auto_start: true
 ```
 
 ### 3. 启动
 
 ```bash
-./start.sh
+./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 
 ### 4. 在飞书中使用
 
-直接给机器人发消息即可，支持控制命令：
+直接给机器人发消息即可：
+
+| 消息类型 | 支持情况 |
+|----------|----------|
+| 文字 | ✅ 完全支持 |
+| 图片 | ✅ 自动压缩后识别 |
+| 语音 | ⚠️ 降级为文本提示 |
+| 文件 | ⚠️ 降级为文本提示 |
+
+控制命令：
 
 | 命令 | 说明 |
 |------|------|
@@ -69,33 +85,33 @@ qoder_instances:
 | `/list` | 列出所有实例 |
 | `/health` | 健康检查 |
 
-## 与 OpenClaw 的区别
+## 技术细节
 
-| | OpenClaw | Qoder Bridge |
-|---|---|---|
-| 连接方式 | WebSocket 主动连接 | WebSocket 主动连接（相同） |
-| 需要公网 IP | ❌ | ❌ |
-| 多实例管理 | ❌ | ✅ |
-| 进程自动重启 | 基础 | ✅ 完整 |
-| REST API | ❌ | ✅ |
-| 多平台支持 | 仅飞书 | 可扩展 |
+### 图片处理
+
+- 自动压缩大于 50KB 的图片
+- 缩放到最大 1024px
+- 转换为 JPEG 格式，质量自适应
+
+### ACP 协议
+
+使用 Agent Client Protocol 与 Qoder 通信：
+- 图片格式：`{"type": "image", "mimeType": "image/jpeg", "data": "<base64>"}`
+- 文字格式：`{"type": "text", "text": "..."}`
 
 ## 文件结构
 
 ```
-apps/qoder-bridge/       # 运行目录（不要直接编辑）
+qoder-bridge/
 ├── adapters/
-│   ├── base.py          # 平台抽象层
+│   ├── base.py          # 平台抽象层、消息类型定义
 │   └── feishu.py        # 飞书 WebSocket 适配器
-├── bridge_core.py       # 消息路由 / 命令处理
-├── qoder_manager.py     # Qoder 进程管理
+├── bridge_core.py       # 消息路由、命令处理、图片压缩
+├── qoder_manager.py     # Qoder ACP 进程管理
 ├── main.py              # FastAPI 服务入口
 ├── config.yaml          # 运行时配置
-├── venv/                # Python 虚拟环境
+├── requirements.txt     # Python 依赖
 └── logs/                # 日志
-
-qoder-bridge/            # 源码目录
-└── ...                  # 同上，编辑这里然后同步
 ```
 
 ## API 文档

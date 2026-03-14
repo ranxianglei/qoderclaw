@@ -206,8 +206,10 @@ class BridgeCore:
         )
 
         # 4. 最终更新为完整内容（去掉光标）
+        logger.debug(f"[bridge] 准备最终更新，长度: {len(reply_text) if reply_text else 0}")
         if reply_text:
-            await bot.update_card_message(msg_id, reply_text)
+            success = await bot.update_card_message(msg_id, reply_text)
+            logger.debug(f"[bridge] 最终更新 {'成功' if success else '失败'}")
         else:
             await bot.update_card_message(msg_id, "（Qoder 未返回回复）")
 

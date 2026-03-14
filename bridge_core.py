@@ -144,9 +144,12 @@ class BridgeCore:
 
     async def _forward_to_qoder(self, message: Message, qoder_name: str) -> None:
         """
-        转发消息到 Qoder ACP 进程，流式接收回复并实时更新飞书消息。
+        转发消息到 Qoder ACP 进程，用卡片消息实现流式更新。
 
-        策略：先发一条"正在思考..."，然后用飞书 PATCH API 不断更新同一条消息内容。
+        策略：
+        1. 发送卡片消息"正在思考..." → 获得 message_id
+        2. 每累积一定字符 → PATCH 更新同一张卡片
+        3. 完成后 → 最终 PATCH 完整内容
         """
         client = self.process_manager.get_client(qoder_name)
         if not client:
@@ -163,21 +166,27 @@ class BridgeCore:
 
         conv_key = message.conversation_id
 
-        # 1. 先发送"正在思考..."占位消息，拿到 message_id
-        placeholder = bot.create_text_message(
-            content="正在思考...",
+        # 1. 发送卡片占位消息
+        msg_id = await bot.send_card_message(
+            content="*正在思考...*",
             conversation_id=message.conversation_id,
-            reply_to=message.id,
         )
-        msg_id = await bot.send_message(placeholder)
         if not msg_id:
-            logger.error("发送占位消息失败")
+            logger.error("发送卡片占位消息失败，回退到普通消息")
+            reply_text = await client.send_prompt(conv_key, message.content)
+            if reply_text:
+                await self._send_reply(message, reply_text)
             return
 
-        # 2. 流式接收：每隔一定间隔 PATCH 更新消息
+        # 2. 流式接收，定期更新卡片
         accumulated = [""]
         last_update_len = [0]
-        update_interval = 80  # 每累积 80 字符更新一次
+        update_interval = 8  # 每 8 字符更新一次，更流畅
+        update_lock = asyncio.Lock()
+
+        async def do_update(text: str):
+            async with update_lock:
+                await bot.update_card_message(msg_id, text + " ▌")
 
         def on_chunk(chunk: str):
             accumulated[0] += chunk
@@ -186,9 +195,7 @@ class BridgeCore:
                 last_update_len[0] = new_len
                 text = accumulated[0].strip()
                 if text:
-                    asyncio.create_task(
-                        bot.update_message(msg_id, text + " ...")
-                    )
+                    asyncio.create_task(do_update(text))
 
         # 3. 发送 prompt 并等待完成
         reply_text = await client.send_prompt(
@@ -197,11 +204,11 @@ class BridgeCore:
             on_chunk=on_chunk,
         )
 
-        # 4. 最终更新为完整回复
+        # 4. 最终更新为完整内容（去掉光标）
         if reply_text:
-            await bot.update_message(msg_id, reply_text)
+            await bot.update_card_message(msg_id, reply_text)
         else:
-            await bot.update_message(msg_id, "（Qoder 未返回回复）")
+            await bot.update_card_message(msg_id, "（Qoder 未返回回复）")
 
     # ------------------------------------------------------------------
     # 控制命令

@@ -195,6 +195,94 @@ class FeishuBotAdapter(BaseBotAdapter):
             logger.error(f"[{self.bot_id}] 飞书 API 错误：{result}")
             return None
 
+    async def send_card_message(
+        self,
+        content: str,
+        conversation_id: str,
+        title: str = "",
+    ) -> Optional[str]:
+        """发送卡片消息，返回 message_id（支持后续 PATCH 更新）"""
+        try:
+            await self._ensure_access_token()
+
+            card = self._build_card(content, title)
+            url = "https://open.feishu.cn/open-apis/im/v1/messages"
+            headers = {
+                "Authorization": f"Bearer {self._access_token}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "receive_id": conversation_id,
+                "msg_type": "interactive",
+                "content": json.dumps(card),
+            }
+            if conversation_id.startswith("oc_"):
+                params = {"receive_id_type": "chat_id"}
+            else:
+                params = {"receive_id_type": "open_id"}
+
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.post(url, headers=headers, json=payload, params=params)
+                result = resp.json()
+
+            if result.get("code") == 0:
+                return result.get("data", {}).get("message_id")
+            else:
+                logger.error(f"[{self.bot_id}] 发送卡片失败：{result}")
+                return None
+
+        except Exception as e:
+            logger.error(f"[{self.bot_id}] 发送卡片异常：{e}")
+            return None
+
+    async def update_card_message(self, message_id: str, content: str, title: str = "") -> bool:
+        """更新卡片消息内容（用于流式输出）"""
+        try:
+            await self._ensure_access_token()
+
+            card = self._build_card(content, title)
+            url = f"https://open.feishu.cn/open-apis/im/v1/messages/{message_id}"
+            headers = {
+                "Authorization": f"Bearer {self._access_token}",
+                "Content-Type": "application/json",
+            }
+            payload = {
+                "msg_type": "interactive",
+                "content": json.dumps(card),
+            }
+
+            async with httpx.AsyncClient(timeout=10) as client:
+                resp = await client.patch(url, headers=headers, json=payload)
+                result = resp.json()
+
+            if result.get("code") == 0:
+                return True
+            else:
+                logger.debug(f"[{self.bot_id}] 更新卡片失败：{result.get('msg')}")
+                return False
+
+        except Exception as e:
+            logger.error(f"[{self.bot_id}] 更新卡片异常：{e}")
+            return False
+
+    def _build_card(self, content: str, title: str = "") -> dict:
+        """构建飞书卡片 JSON"""
+        elements = [
+            {
+                "tag": "markdown",
+                "content": content,
+            }
+        ]
+        card = {
+            "elements": elements,
+        }
+        if title:
+            card["header"] = {
+                "title": {"tag": "plain_text", "content": title},
+                "template": "blue",
+            }
+        return card
+
     async def update_message(self, message_id: str, content: str) -> bool:
         """更新已发送消息的内容（用于流式输出）"""
         try:

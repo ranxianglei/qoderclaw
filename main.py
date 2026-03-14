@@ -12,6 +12,7 @@ from contextlib import asynccontextmanager
 
 import yaml
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from loguru import logger
 import uvicorn
@@ -20,6 +21,7 @@ from adapters.base import BotConfig, BotStatus
 from adapters.feishu import FeishuBotAdapter, FeishuPlatformManager
 from qoder_manager import QoderConfig, get_process_manager, QoderStatus
 from bridge_core import BridgeCore, get_bridge_core
+from openai_compat import router as openai_router
 
 
 # -----------------------------------------------------------------------------
@@ -121,9 +123,21 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Qoder Bridge",
-    description="飞书机器人 ↔ Qoder 双向桥接器（WebSocket 模式，无需公网 IP）",
-    version="2.0.0",
+    description="飞书机器人 ↔ Qoder 双向桥接器（WebSocket 模式，无需公网 IP）+ OpenAI 兼容 API",
+    version="2.1.0",
     lifespan=lifespan,
+)
+
+# 注册 OpenAI 兼容路由
+app.include_router(openai_router, tags=["OpenAI Compatible"])
+
+# CORS（允许前端跨域访问）
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -281,6 +295,10 @@ def main():
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--reload", action="store_true")
     args = parser.parse_args()
+
+    # 切换到脚本所在目录，确保 config.yaml 等相对路径正确
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    os.chdir(script_dir)
 
     os.makedirs("logs", exist_ok=True)
     logger.add(

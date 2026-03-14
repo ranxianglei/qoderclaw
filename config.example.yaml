@@ -1,0 +1,76 @@
+# Qoder Bridge 配置文件示例
+
+# 系统配置
+system:
+  host: "0.0.0.0"
+  port: 8080
+  
+  # Redis 配置（用于会话存储）
+  redis_host: "localhost"
+  redis_port: 6379
+  redis_db: 0
+  redis_password: null
+  
+  # 日志配置
+  log_level: "INFO"
+  log_file: "logs/qoder_bridge.log"
+  
+  # 健康检查
+  health_check_interval: 30  # 秒
+  heartbeat_timeout: 120  # 秒
+  
+  # 会话配置
+  session_timeout: 3600  # 秒
+  max_message_length: 4000
+
+# Qoder 实例配置
+qoder_instances:
+  research-assistant:
+    name: "research-assistant"
+    workdir: "/home/dog/projects/research"
+    cmd: "qoder"
+    args: []
+    auto_start: true
+    max_restarts: 3
+  
+  coding-assistant:
+    name: "coding-assistant"
+    workdir: "/home/dog/projects/coding"
+    cmd: "qoder"
+    args: ["--mode", "code"]
+    auto_start: true
+    max_restarts: 3
+  
+  devops-assistant:
+    name: "devops-assistant"
+    workdir: "/home/dog/projects/devops"
+    cmd: "qoder"
+    args: []
+    auto_start: false
+    max_restarts: 5
+
+# 飞书机器人配置
+feishu_bots:
+  bot-research:
+    app_id: "cli_a1b2c3d4e5f6g7h8"
+    app_secret: "SECRET_KEY_HERE"
+    verification_token: "VERIFICATION_TOKEN_HERE"
+    encrypt_key: null
+    qoder_instance: "research-assistant"
+    enabled: true
+  
+  bot-coding:
+    app_id: "cli_x1y2z3a4b5c6d7e8"
+    app_secret: "ANOTHER_SECRET_KEY"
+    verification_token: "ANOTHER_VERIFICATION_TOKEN"
+    encrypt_key: null
+    qoder_instance: "coding-assistant"
+    enabled: true
+  
+  bot-devops:
+    app_id: "cli_m1n2o3p4q5r6s7t8"
+    app_secret: "DEVOPS_SECRET_KEY"
+    verification_token: "DEVOPS_VERIFICATION_TOKEN"
+    encrypt_key: null
+    qoder_instance: "devops-assistant"
+    enabled: true

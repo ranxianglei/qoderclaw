@@ -1,0 +1,27 @@
+# 飞书开放平台 SDK
+lark-oapi>=2.0.0
+
+# Web 框架
+fastapi>=0.109.0
+uvicorn[standard]>=0.27.0
+websockets>=12.0
+
+# 进程管理
+psutil>=5.9.0
+
+# 配置管理
+pydantic>=2.5.0
+pydantic-settings>=2.1.0
+python-dotenv>=1.0.0
+
+# 日志
+loguru>=0.7.0
+
+# HTTP 客户端
+httpx>=0.26.0
+
+# 会话存储
+redis>=5.0.0
+
+# 工具库
+python-multipart>=0.0.6

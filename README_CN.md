@@ -103,9 +103,17 @@ CUSTOM_MODELS=+default-assistant
 DEFAULT_MODEL=default-assistant
 EOF
 
-# 启动前端
+# 开发模式（支持热重载，首次加载较慢）
 PORT=3000 yarn dev
+
+# 或生产模式（更快，推荐部署使用）
+yarn build
+PORT=3000 yarn start
 ```
+
+浏览器访问 http://localhost:3000 即可使用。
+
+**提示：** 生产模式启动更快（约 500ms），开发模式首次访问需要编译较慢。开发时用 `yarn dev`，部署时用 `yarn build && yarn start`。
 
 浏览器访问 http://localhost:3000 即可使用。
 

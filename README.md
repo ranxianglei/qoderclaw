@@ -113,10 +113,17 @@ CUSTOM_MODELS=+default-assistant
 DEFAULT_MODEL=default-assistant
 EOF
 
+# Development mode (hot reload, slower first load)
 PORT=3000 yarn dev
+
+# OR Production mode (faster, recommended for deployment)
+yarn build
+PORT=3000 yarn start
 ```
 
 Open http://localhost:3000 in your browser.
+
+**Note:** Production mode is much faster (~500ms startup vs slow compilation in dev mode). Use `yarn dev` for development with hot reload, `yarn build && yarn start` for production.
 
 ### 5. Use via Lark/Feishu (Optional)
 

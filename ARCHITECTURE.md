@@ -1,8 +1,8 @@
-# Qoder Bridge 架构设计文档
+# QoderClaw 架构设计文档
 
 ## 1. 系统概述
 
-Qoder Bridge 是一个双向桥接器，用于连接 IM 平台（飞书、钉钉等）与本地 Qoder AI 助手进程。
+QoderClaw 是一个双向桥接器，用于连接 IM 平台（飞书、钉钉等）与本地 Qoder AI 助手进程。
 
 ### 设计目标
 
@@ -412,7 +412,7 @@ CMD ["python", "main.py"]
 
 ## 12. 与 OpenClaw 对比
 
-| 特性 | OpenClaw | Qoder Bridge |
+| 特性 | OpenClaw | QoderClaw |
 |------|----------|--------------|
 | 定位 | 单机器人框架 | 多机器人管理平台 |
 | 架构 | 单体应用 | 微服务架构 |

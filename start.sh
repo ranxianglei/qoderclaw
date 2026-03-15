@@ -1,5 +1,5 @@
 #!/bin/bash
-# Qoder Bridge 启动脚本
+# QoderClaw 启动脚本
 
 set -e
 
@@ -26,7 +26,7 @@ mkdir -p logs
 
 # 启动服务
 echo "======================================"
-echo "启动 Qoder Bridge"
+echo "启动 QoderClaw"
 echo "======================================"
 echo ""
 

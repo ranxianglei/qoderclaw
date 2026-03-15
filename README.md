@@ -1,197 +1,177 @@
-# Qoder Bridge
+# QoderClaw
 
-Qoder AI 助手的多平台桥接器，支持飞书机器人和 Web 前端。
+[中文文档](README_CN.md)
 
-**无需公网 IP**，飞书端使用 WebSocket 长连接主动接收消息。
+Multi-platform bridge for [Qoder](https://qoder.com) AI assistant. Connect Qoder to Lark/Feishu bots, web UIs, or any OpenAI-compatible client.
 
-## 功能特性
+**No public IP required** - Lark/Feishu uses WebSocket for message delivery.
 
-- **双端接入**：飞书机器人 + Web 前端（NextChat 等 OpenAI 兼容客户端）
-- **流式输出**：实时显示 AI 回复，打字机效果
-- **多模态支持**：
-  - 图片：自动压缩后发送给 Qoder 识别
-  - 语音：降级为文本提示（Qoder 暂不支持音频）
-- **多实例管理**：支持多个独立 Qoder 进程
-- **多会话管理**：飞书端支持创建/切换/管理多个会话（交互式卡片）
-- **会话同步**：Web 前端可加载并续用 CLI/飞书中的 Qoder 会话
-- **工具调用可视化**：Web 前端实时显示 Bash/文件操作等工具执行状态
-- **控制命令**：`/help`、`/status`、`/restart`、`/forget`、`/sessions` 等
-- **OpenAI 兼容 API**：任何 OpenAI 兼容前端可直接对接
+## Features
 
-## 架构
+- **Dual access** - Lark/Feishu bot + Web frontend (NextChat or any OpenAI-compatible client)
+- **Streaming output** - Real-time AI responses with typewriter effect
+- **Multimodal** - Image recognition (auto-compressed), voice/file graceful degradation
+- **Multi-instance** - Run multiple independent Qoder processes
+- **Multi-session** - Create, switch, and manage sessions via interactive Lark cards
+- **Session sync** - Web frontend can load and continue CLI/Lark sessions
+- **Tool call visualization** - Real-time display of Bash, file operations, and other tool executions in the web UI
+- **Control commands** - `/help`, `/status`, `/restart`, `/forget`, `/sessions`, etc.
+- **OpenAI-compatible API** - Any OpenAI-compatible frontend works out of the box
+
+## Architecture
 
 ```
-             飞书用户                 Web 用户 (NextChat)
-               ↕                       ↕ HTTP
-          飞书服务器                 localhost:3000
-               ↕ WebSocket              ↕
-┌──────────────────────────────────────────────────────────┐
-│                     Qoder Bridge (:8080)                  │
-│                                                          │
-│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
-│  │ 飞书适配器    │  │ OpenAI API   │  │  管理 API    │   │
-│  │ (WebSocket)  │  │ /v1/*        │  │  /api/*      │   │
-│  └──────┬───────┘  └──────┬───────┘  └──────────────┘   │
-│         │                 │                              │
-│         └─────────────────┤                              │
-│                           ↓                              │
-│              ┌────────────────────┐                      │
-│              │  会话管理 + ACP    │                      │
-│              │  (多会话隔离)      │                      │
-│              └────────┬───────────┘                      │
-│                       ↓                                  │
-│                 Qoder 进程                                │
-│              (stdin/stdout ACP)                           │
-└──────────────────────────────────────────────────────────┘
+          Lark/Feishu User            Web User (NextChat)
+               |                          | HTTP
+          Lark Server                localhost:3000
+               | WebSocket                |
++---------------------------------------------------------+
+|                    QoderClaw (:8080)                     |
+|                                                         |
+|  +-------------+  +-------------+  +--------------+    |
+|  | Lark Adapter |  | OpenAI API  |  | Management   |    |
+|  | (WebSocket)  |  | /v1/*       |  | API /api/*   |    |
+|  +------+-------+  +------+------+  +--------------+    |
+|         |                 |                              |
+|         +-----------------+                              |
+|                  |                                       |
+|         +--------v----------+                            |
+|         | Session Manager   |                            |
+|         | + ACP Protocol    |                            |
+|         +--------+----------+                            |
+|                  |                                       |
+|            Qoder Process                                 |
+|          (stdin/stdout ACP)                               |
++---------------------------------------------------------+
 ```
 
-## 快速开始
+## Quick Start
 
-### 1. 安装后端
+### 1. Install
 
 ```bash
-cd qoder-bridge
+cd qoderclaw
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 2. 配置后端
+Or use the install script:
 
-编辑 `config.yaml`，填入飞书凭证（可选，不需要飞书可跳过）：
+```bash
+./install.sh
+```
+
+### 2. Configure
+
+Copy and edit the config file:
+
+```bash
+cp config.example.yaml config.yaml
+```
+
+Minimal configuration (Lark is optional):
 
 ```yaml
-feishu_bots:
-  bot-default:
-    app_id: "cli_xxx"
-    app_secret: "xxx"
-    verification_token: "xxx"
-    qoder_instance: "default-assistant"
-
 qoder_instances:
   default-assistant:
     name: "default-assistant"
     workdir: "/path/to/your/project"
     cmd: "qodercli"
     auto_start: true
+
+# Optional: Lark/Feishu bot
+feishu_bots:
+  bot-default:
+    app_id: "cli_xxx"
+    app_secret: "xxx"
+    verification_token: "xxx"
+    qoder_instance: "default-assistant"
+    enabled: true
 ```
 
-### 3. 启动后端
+### 3. Start the Server
 
 ```bash
 ./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 
-### 4. 安装并启动前端（可选）
+### 4. Connect a Web Frontend (Optional)
 
-使用 NextChat（推荐）：
+Using [NextChat](https://github.com/ChatGPTNextWeb/NextChat):
 
 ```bash
-# 克隆前端
 git clone https://github.com/ChatGPTNextWeb/NextChat.git ~/frontend/nextchat
 cd ~/frontend/nextchat
-
-# 安装依赖
 yarn install
 
-# 配置环境变量（指向 Bridge）
 cat > .env.local << 'EOF'
-OPENAI_API_KEY=sk-qoder-bridge
+OPENAI_API_KEY=sk-qoderclaw
 BASE_URL=http://localhost:8080
 HIDE_USER_API_KEY=1
 CUSTOM_MODELS=+default-assistant
 DEFAULT_MODEL=default-assistant
 EOF
 
-# 启动前端
 PORT=3000 yarn dev
 ```
 
-浏览器访问 http://localhost:3000 即可使用。
+Open http://localhost:3000 in your browser.
 
-### 5. 在飞书中使用（可选）
+### 5. Use via Lark/Feishu (Optional)
 
-直接给机器人发消息即可：
+Send messages directly to your bot:
 
-| 消息类型 | 支持情况 |
-|----------|----------|
-| 文字 | ✅ 完全支持 |
-| 图片 | ✅ 自动压缩后识别 |
-| 语音 | ⚠️ 降级为文本提示 |
-| 文件 | ⚠️ 降级为文本提示 |
+| Message Type | Support |
+|-------------|---------|
+| Text | Full support |
+| Image | Auto-compressed + recognized |
+| Voice | Graceful degradation to text |
+| File | Graceful degradation to text |
 
-控制命令：
+Control commands:
 
-| 命令 | 说明 |
-|------|------|
-| `/help` | 查看帮助 |
-| `/status` | 查看 Qoder 状态 |
-| `/restart <实例名>` | 重启 Qoder |
-| `/forget` | 清除会话记忆 |
-| `/list` | 列出所有实例 |
-| `/sessions` | 列出所有会话（飞书交互式卡片）|
-| `/health` | 健康检查 |
+| Command | Description |
+|---------|-------------|
+| `/help` | Show help |
+| `/status` | View Qoder status |
+| `/restart <instance>` | Restart Qoder |
+| `/forget` | Clear session memory |
+| `/list` | List all instances |
+| `/sessions` | List all sessions (interactive card) |
+| `/health` | Health check |
 
-## 部署方案
+## Deployment
 
-### 方案一：仅飞书机器人（无需前端）
-
-适合只需要在飞书中使用 Qoder 的场景。
+### Option A: Lark Bot Only
 
 ```bash
-# 只需启动 Bridge
 ./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 
-### 方案二：仅 Web 前端（无需飞书）
+### Option B: Web Frontend Only (No Lark)
 
-适合只需要浏览器访问的场景，不需要飞书开放平台账号。
+Skip `feishu_bots` in config, then start the server and frontend.
 
-```bash
-# 1. 启动 Bridge（config.yaml 中不配置 feishu_bots 即可）
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+### Option C: Both
 
-# 2. 启动 NextChat 前端
-cd ~/frontend/nextchat
-PORT=3000 yarn dev
-```
+Configure both `feishu_bots` and `qoder_instances`, start the server, then the frontend. Both share the same Qoder instance.
 
-### 方案三：双端同时使用
+### Production Deployment
 
-飞书机器人和 Web 前端同时可用，共享同一个 Qoder 实例。
-
-```yaml
-# config.yaml 配置飞书机器人
-feishu_bots:
-  bot-default:
-    app_id: "cli_xxx"
-    ...
-
-qoder_instances:
-  default-assistant:
-    name: "default-assistant"
-    ...
-```
-
-启动顺序：
-1. Bridge (`:8080`)
-2. NextChat (`:3000`)
-
-### 生产部署建议
-
-**使用 systemd 管理 Bridge：**
+**systemd service:**
 
 ```ini
-# /etc/systemd/system/qoder-bridge.service
+# /etc/systemd/system/qoderclaw.service
 [Unit]
-Description=Qoder Bridge
+Description=QoderClaw
 After=network.target
 
 [Service]
 Type=simple
 User=youruser
-WorkingDirectory=/path/to/qoder-bridge
-ExecStart=/path/to/qoder-bridge/venv/bin/python main.py --host 0.0.0.0 --port 8080
+WorkingDirectory=/path/to/qoderclaw
+ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=5
 
@@ -199,26 +179,15 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-**使用 PM2 管理前端：**
+## Technical Details
 
-```bash
-cd ~/frontend/nextchat
-yarn build
-pm2 start "PORT=3000 yarn start" --name nextchat
-```
+### OpenAI-Compatible API
 
-## 技术细节
+| Endpoint | Description |
+|----------|-------------|
+| `GET /v1/models` | List available models |
+| `POST /v1/chat/completions` | Chat completion (supports SSE streaming) |
 
-### OpenAI 兼容 API
-
-Bridge 实现了 OpenAI 兼容的 REST API：
-
-| 端点 | 说明 |
-|------|------|
-| `GET /v1/models` | 列出可用模型 |
-| `POST /v1/chat/completions` | 聊天补全（支持 SSE 流式）|
-
-请求示例：
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
@@ -229,57 +198,50 @@ curl http://localhost:8080/v1/chat/completions \
   }'
 ```
 
-### 图片处理
+### ACP Protocol
 
-- 自动压缩大于 50KB 的图片
-- 缩放到最大 1024px
-- 转换为 JPEG 格式，质量自适应
-- 支持格式：PNG, JPEG, GIF, WebP
+Communicates with Qoder via Agent Client Protocol (ACP) over stdin/stdout:
+- Text: `{"type": "text", "text": "..."}`
+- Image: `{"type": "image", "mimeType": "image/jpeg", "data": "<base64>"}`
+- Tool events: Parses `tool_call` / `tool_call_update` notifications and forwards them to the frontend via SSE
 
-### ACP 协议
+### Session Management
 
-使用 Agent Client Protocol (ACP) 与 Qoder 通信：
-- 文字格式：`{"type": "text", "text": "..."}`
-- 图片格式：`{"type": "image", "mimeType": "image/jpeg", "data": "<base64>"}`
-- 工具事件：Bridge 解析 ACP 的 `tool_call` / `tool_call_update` 通知，通过 SSE 流转发给前端
+- **Lark/Feishu**: Auto-isolated by `open_id` (DM) / `chat_id` (group chat)
+- **Multi-session**: Create, switch, and manage multiple sessions via interactive cards (`/sessions`)
+- **Web**: Routed via `qoder_session` cookie to the corresponding Qoder session
+- **Cross-platform sync**: Web frontend can load sessions from CLI, enabling shared context
+- **Persistence**: Session data stored in `~/.qoder/projects/`
 
-### 会话管理
+### Tool Call Visualization
 
-- **飞书端**：基于 `open_id`（单聊）/ `chat_id`（群聊）自动隔离会话
-- **飞书多会话**：通过交互式卡片（`/sessions`）创建、切换、管理多个独立会话
-- **Web 端**：通过 `qoder_session` Cookie 路由到对应 Qoder 会话
-- **会话同步**：Web 前端可加载 CLI 中已有的 Qoder 会话，实现跨端共享上下文
-- **会话持久化**：会话数据存储在 `~/.qoder/projects/` 目录
+SSE stream includes tool events for real-time frontend display:
+- Tool type (Bash, Read, Write, Edit, etc.)
+- Execution status (pending / in_progress / completed / error)
+- Input parameter summaries
 
-### 工具调用可视化
-
-SSE 流中携带工具事件，前端可实时显示：
-- 工具类型（Bash、Read、Write、Edit 等）
-- 执行状态（pending / in_progress / completed / error）
-- 工具输入参数摘要
-
-## 文件结构
+## Project Structure
 
 ```
-qoder-bridge/
+qoderclaw/
 ├── adapters/
-│   ├── base.py            # 平台抽象层、消息类型定义
-│   └── feishu.py          # 飞书 WebSocket 适配器（含多会话卡片）
-├── bridge_core.py         # 消息路由、命令处理、图片压缩
-├── qoder_manager.py       # Qoder ACP 进程管理、会话生命周期
-├── openai_compat.py       # OpenAI 兼容 API 层（含工具事件 SSE）
-├── main.py                # FastAPI 服务入口
-├── config.py              # 配置模型定义
-├── config.example.yaml    # 配置文件示例
-├── requirements.txt       # Python 依赖
-├── install.sh             # 安装脚本
-├── start.sh               # 启动脚本
-└── .gitignore             # Git 忽略规则
+│   ├── base.py            # Platform abstraction layer
+│   └── feishu.py          # Lark/Feishu WebSocket adapter (multi-session cards)
+├── bridge_core.py         # Message routing, command processing, image compression
+├── qoder_manager.py       # Qoder ACP process management, session lifecycle
+├── openai_compat.py       # OpenAI-compatible API layer (with tool event SSE)
+├── main.py                # FastAPI server entry point
+├── config.py              # Configuration models
+├── config.example.yaml    # Example configuration
+├── requirements.txt       # Python dependencies
+├── install.sh             # Installation script
+├── start.sh               # Start script
+└── .gitignore             # Git ignore rules
 ```
 
-## API 文档
+## API Docs
 
-服务启动后访问：http://localhost:8080/docs
+After starting the server, visit: http://localhost:8080/docs
 
 ## License
 

@@ -1,11 +1,11 @@
-# Qoder Bridge 快速开始指南
+# QoderClaw 快速开始指南
 
 ## 🎯 10 分钟快速上手
 
 ### 第一步：安装依赖（2 分钟）
 
 ```bash
-cd qoder-bridge
+cd qoderclaw
 
 # 运行安装脚本
 ./install.sh
@@ -68,7 +68,7 @@ cd qoder-bridge
 
 ---
 
-### 第三步：配置 Qoder Bridge（1 分钟）
+### 第三步：配置 QoderClaw（1 分钟）
 
 编辑 `config.yaml`：
 
@@ -104,9 +104,9 @@ qoder_instances:
 
 ```
 ======================================
-启动 Qoder Bridge
+启动 QoderClaw
 ======================================
-INFO:     Starting Qoder Bridge on 0.0.0.0:8080
+INFO:     Starting QoderClaw on 0.0.0.0:8080
 INFO:     Application startup complete.
 ```
 
@@ -175,7 +175,7 @@ curl http://localhost:8080/health
 - [ ] 飞书开放平台的事件订阅 URL 是否正确
 - [ ] 服务器是否公网可访问
 - [ ] Verification Token 是否匹配
-- [ ] 查看日志：`tail -f logs/qoder_bridge.log`
+- [ ] 查看日志：`tail -f logs/qoderclaw.log`
 
 ### 问题 2：Qoder 进程启动失败
 
@@ -196,7 +196,7 @@ pip install -U qoder
 
 **查看日志**：
 ```bash
-grep "WebSocket" logs/qoder_bridge.log
+grep "WebSocket" logs/qoderclaw.log
 ```
 
 **可能的原因**：
@@ -257,4 +257,4 @@ grep "WebSocket" logs/qoder_bridge.log
 - [ ] 飞书机器人能收到消息
 - [ ] 控制命令能正常执行
 
-全部完成后，你就可以享受强大的 Qoder Bridge 了！🎉
+全部完成后，你就可以享受强大的 QoderClaw 了！🎉

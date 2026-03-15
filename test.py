@@ -1,5 +1,5 @@
 """
-测试脚本 - 验证 Qoder Bridge 的核心功能
+测试脚本 - 验证 QoderClaw 的核心功能
 """
 import asyncio
 import sys
@@ -58,7 +58,7 @@ async def test_process_manager():
         name="test-instance",
         workdir="/tmp/qoder-test",
         cmd="echo",
-        args=["Qoder Bridge Test"],
+        args=["QoderClaw Test"],
         auto_start=False,
     )
     
@@ -167,7 +167,7 @@ async def test_message_flow():
 async def main():
     """运行所有测试"""
     print("=" * 60)
-    print("Qoder Bridge 测试套件")
+    print("QoderClaw 测试套件")
     print("=" * 60)
     
     tests = [

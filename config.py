@@ -39,7 +39,7 @@ class SystemConfig(BaseSettings):
     
     # 日志配置
     log_level: str = Field(default="INFO", description="日志级别")
-    log_file: str = Field(default="logs/qoder_bridge.log", description="日志文件")
+    log_file: str = Field(default="logs/qoderclaw.log", description="日志文件")
     
     # 健康检查
     health_check_interval: int = Field(default=30, description="健康检查间隔（秒）")

@@ -20,7 +20,7 @@
           └───────────────┴───────────────┘
                           ▼
               ┌─────────────────────┐
-              │   Qoder Bridge      │
+              │   QoderClaw      │
               │  ┌───────────────┐  │
               │  │ Session管理器  │  │
               │  │  - A的上下文   │  │
@@ -110,7 +110,7 @@ system:
   host: "0.0.0.0"
   port: 8080
   log_level: "INFO"
-  log_file: "logs/qoder_bridge.log"
+  log_file: "logs/qoderclaw.log"
   health_check_interval: 30
   heartbeat_timeout: 120
   session_timeout: 3600
@@ -178,7 +178,7 @@ feishu_bots:
 ### 安装依赖
 
 ```bash
-cd qoder-bridge
+cd qoderclaw
 pip install -r requirements.txt
 ```
 
@@ -199,12 +199,12 @@ nohup python main.py > logs/bridge.log 2>&1 &
 
 ```bash
 # 查看日志
-tail -f logs/qoder_bridge.log
+tail -f logs/qoderclaw.log
 
 # 预期输出：
 # [INFO] 飞书 WebSocket 连接成功
 # [INFO] 机器人信息：YourBot (ou_xxx)
-# [INFO] Qoder Bridge 启动完成
+# [INFO] QoderClaw 启动完成
 ```
 
 ## 使用说明

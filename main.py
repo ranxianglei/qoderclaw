@@ -1,5 +1,5 @@
 """
-主服务 - Qoder Bridge
+主服务 - QoderClaw
 
 - 启动时从 config.yaml 自动加载所有机器人和 Qoder 实例
 - 飞书使用 WebSocket 长连接，无需公网 IP
@@ -93,7 +93,7 @@ async def init_from_config(bridge: BridgeCore) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    logger.info("  Qoder Bridge 启动中...")
+    logger.info("  QoderClaw 启动中...")
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     bridge = get_bridge_core()
@@ -105,14 +105,14 @@ async def lifespan(app: FastAPI):
     await bridge.start()
 
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
-    logger.info("  Qoder Bridge 启动完成 ✅")
+    logger.info("  QoderClaw 启动完成 ✅")
     logger.info("  飞书机器人已主动连接到飞书服务器（无需公网 IP）")
     logger.info("  API 文档: http://localhost:8080/docs")
     logger.info("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━")
 
     yield
 
-    logger.info("Qoder Bridge 正在关闭...")
+    logger.info("QoderClaw 正在关闭...")
     await bridge.stop()
     await get_process_manager().stop_all()
 
@@ -122,7 +122,7 @@ async def lifespan(app: FastAPI):
 # -----------------------------------------------------------------------------
 
 app = FastAPI(
-    title="Qoder Bridge",
+    title="QoderClaw",
     description="飞书机器人 ↔ Qoder 双向桥接器（WebSocket 模式，无需公网 IP）+ OpenAI 兼容 API",
     version="2.1.0",
     lifespan=lifespan,
@@ -171,7 +171,7 @@ class CreateQoderRequest(BaseModel):
 @app.get("/", summary="服务信息")
 async def root():
     return {
-        "service": "Qoder Bridge",
+        "service": "QoderClaw",
         "version": "2.0.0",
         "mode": "WebSocket（无需公网 IP）",
         "docs": "/docs",
@@ -290,7 +290,7 @@ async def restart_qoder(name: str):
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="Qoder Bridge Service")
+    parser = argparse.ArgumentParser(description="QoderClaw Service")
     parser.add_argument("--host", default="0.0.0.0")
     parser.add_argument("--port", type=int, default=8080)
     parser.add_argument("--reload", action="store_true")
@@ -302,14 +302,14 @@ def main():
 
     os.makedirs("logs", exist_ok=True)
     logger.add(
-        "logs/qoder_bridge.log",
+        "logs/qoderclaw.log",
         rotation="10 MB",
         retention="7 days",
         level="DEBUG",
         encoding="utf-8",
     )
 
-    logger.info(f"Starting Qoder Bridge on {args.host}:{args.port}")
+    logger.info(f"Starting QoderClaw on {args.host}:{args.port}")
     uvicorn.run(
         "main:app",
         host=args.host,

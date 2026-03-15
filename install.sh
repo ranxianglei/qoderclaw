@@ -1,10 +1,10 @@
 #!/bin/bash
-# Qoder Bridge 快速启动脚本
+# QoderClaw 快速启动脚本
 
 set -e
 
 echo "======================================"
-echo "Qoder Bridge 安装向导"
+echo "QoderClaw 安装向导"
 echo "======================================"
 
 # 检查 Python

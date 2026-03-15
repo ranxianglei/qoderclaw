@@ -1,4 +1,4 @@
-# Qoder Bridge 配置文件示例
+# QoderClaw 配置文件示例
 
 # 系统配置
 system:
@@ -13,7 +13,7 @@ system:
   
   # 日志配置
   log_level: "INFO"
-  log_file: "logs/qoder_bridge.log"
+  log_file: "logs/qoderclaw.log"
   
   # 健康检查
   health_check_interval: 30  # 秒

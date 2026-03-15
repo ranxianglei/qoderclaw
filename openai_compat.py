@@ -2,7 +2,7 @@
 OpenAI 兼容 API 层
 
 实现 /v1/chat/completions 和 /v1/models，
-让任何 OpenAI 兼容前端（open-webui、lobe-chat 等）直接对接 Qoder Bridge。
+让任何 OpenAI 兼容前端（open-webui、lobe-chat 等）直接对接 QoderClaw。
 """
 import asyncio
 import base64
@@ -150,7 +150,7 @@ async def list_models():
             "id": name,
             "object": "model",
             "created": int(time.time()),
-            "owned_by": "qoder-bridge",
+            "owned_by": "qoderclaw",
         })
     # 始终返回一个默认模型
     if not models:
@@ -158,7 +158,7 @@ async def list_models():
             "id": "qoder",
             "object": "model",
             "created": int(time.time()),
-            "owned_by": "qoder-bridge",
+            "owned_by": "qoderclaw",
         })
     return {"object": "list", "data": models}
 

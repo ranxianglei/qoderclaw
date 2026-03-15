@@ -467,7 +467,7 @@ class BridgeCore:
 
     def _format_help(self) -> str:
         """格式化帮助"""
-        lines = ["Qoder Bridge 命令:", ""]
+        lines = ["QoderClaw 命令:", ""]
         for cmd, desc in self.commands_help.items():
             lines.append(f"  {self.command_prefix}{cmd} - {desc}")
         lines.extend(["", "直接发送文字消息即可与 Qoder 对话"])

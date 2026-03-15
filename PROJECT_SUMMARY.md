@@ -1,4 +1,4 @@
-# Qoder Bridge 项目总结
+# QoderClaw 项目总结
 
 ## 📊 项目概览
 
@@ -259,7 +259,7 @@ Session:
 
 ### 资源消耗
 
-单个 Qoder Bridge 实例：
+单个 QoderClaw 实例：
 - CPU: 5-10%（空闲时）
 - 内存：200-300MB
 - 磁盘：日志 10MB/天
@@ -310,7 +310,7 @@ Session:
 
 ## 📝 与 OpenClaw 对比
 
-| 维度 | OpenClaw | Qoder Bridge |
+| 维度 | OpenClaw | QoderClaw |
 |------|----------|--------------|
 | **定位** | 单机器人框架 | 多机器人管理平台 |
 | **代码量** | ~5000 行 | ~2000 行 |
@@ -322,7 +322,7 @@ Session:
 | **部署** | 本地 | 本地/云端 |
 | **学习曲线** | 陡峭 | 平缓 |
 
-**Qoder Bridge 优势**:
+**QoderClaw 优势**:
 - 更清晰的架构分层
 - 更易扩展和维护
 - 原生支持多实例
@@ -355,7 +355,7 @@ Session:
 ## 📋 文件清单
 
 ```
-qoder-bridge/
+qoderclaw/
 ├── adapters/
 │   ├── __init__.py          # 包初始化
 │   ├── base.py              # 平台抽象层 (199 行)

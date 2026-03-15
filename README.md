@@ -98,10 +98,10 @@ feishu_bots:
 
 ### 4. Connect a Web Frontend (Optional)
 
-Using [NextChat](https://github.com/ChatGPTNextWeb/NextChat):
+Using [nextchat-qoder](https://github.com/ranxianglei/nextchat-qoder) (NextChat fork with QoderClaw integration):
 
 ```bash
-git clone https://github.com/ChatGPTNextWeb/NextChat.git ~/frontend/nextchat
+git clone https://github.com/ranxianglei/nextchat-qoder.git ~/frontend/nextchat
 cd ~/frontend/nextchat
 yarn install
 

@@ -84,11 +84,11 @@ qoder_instances:
 
 ### 4. 安装并启动前端（可选）
 
-使用 NextChat（推荐）：
+使用 nextchat-qoder（推荐，已集成 QoderClaw）：
 
 ```bash
 # 克隆前端
-git clone https://github.com/ChatGPTNextWeb/NextChat.git ~/frontend/nextchat
+git clone https://github.com/ranxianglei/nextchat-qoder.git ~/frontend/nextchat
 cd ~/frontend/nextchat
 
 # 安装依赖

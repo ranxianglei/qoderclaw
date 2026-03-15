@@ -242,60 +242,136 @@ class QoderAcpClient:
 
     async def _handle_command(self, session_id: str, text: str) -> Optional[str]:
         """
-        处理以 / 开头的命令。返回命令执行结果，如果不是命令则返回 None。
+        处理命令。支持两种方式：
+        1. 斜杠命令：/model lite, /mode architect, /forget, /help
+        2. 自然语言：切换模型为lite, 使用lite模型, switch to lite model
 
-        支持的命令：
-        - /model <modelId> - 切换模型（如 /model lite, /model pro）
-        - /mode <modeId> - 切换模式
-        - /forget - 清除当前会话历史
-        - /help - 显示帮助
+        返回命令执行结果，如果不是命令则返回 None。
         """
-        text = text.strip()
-        if not text.startswith("/"):
+        # 去除 OpenClaw 的 sender metadata 前缀
+        clean_text = self._strip_openclaw_metadata(text).strip()
+        if not clean_text:
             return None
 
+        # 尝试斜杠命令
+        if clean_text.startswith("/"):
+            return await self._handle_slash_command(session_id, clean_text)
+
+        # 尝试自然语言命令
+        return await self._handle_natural_command(session_id, clean_text)
+
+    @staticmethod
+    def _strip_openclaw_metadata(text: str) -> str:
+        """去除 OpenClaw 在消息前注入的 'Sender (untrusted metadata):\n```json\n{...}\n```\n' 前缀"""
+        import re
+        # 匹配 OpenClaw 的 metadata 块：Sender (...):```json{...}```
+        pattern = r'^Sender\s*\(.*?\):\s*```json\s*\{[^}]*\}\s*```\s*'
+        cleaned = re.sub(pattern, '', text, count=1, flags=re.DOTALL)
+        return cleaned
+
+    async def _handle_slash_command(self, session_id: str, text: str) -> Optional[str]:
+        """处理 / 开头的命令"""
         parts = text.split(None, 1)
         command = parts[0].lower()
-        args = parts[1] if len(parts) > 1 else ""
+        args = parts[1].strip() if len(parts) > 1 else ""
 
         if command == "/model":
-            model_id = args.strip()
-            if not model_id:
-                return "用法: /model <modelId>\n可用模型: lite, efficient, performance, ultimate, auto"
-            resp = await self._rpc_call("session/set_model", {
-                "sessionId": session_id,
-                "modelId": model_id,
-            }, timeout=10)
-            if resp is not None:
-                return f"✓ 模型已切换为: {model_id}"
-            return f"✗ 切换模型失败"
-
+            return await self._do_switch_model(session_id, args)
         elif command == "/mode":
-            mode_id = args.strip()
-            if not mode_id:
-                return "用法: /mode <modeId>\n可用模式请参考 Qoder 文档"
-            resp = await self._rpc_call("session/set_mode", {
-                "sessionId": session_id,
-                "modeId": mode_id,
-            }, timeout=10)
-            if resp is not None:
-                return f"✓ 模式已切换为: {mode_id}"
-            return f"✗ 切换模式失败"
-
+            return await self._do_switch_mode(session_id, args)
         elif command == "/forget":
-            # 销毁会话，下次消息会创建新会话
-            self.sessions.pop(session_id, None)
-            return "✓ 会话历史已清除"
-
+            return self._do_forget(session_id)
         elif command == "/help":
-            return """可用命令:
-/model <modelId> - 切换模型 (lite, efficient, performance, ultimate, auto)
-/mode <modeId> - 切换模式
-/forget - 清除当前会话历史
-/help - 显示此帮助"""
-
+            return self._do_help()
         else:
             return f"未知命令: {command}\n输入 /help 查看可用命令"
+
+    async def _handle_natural_command(self, session_id: str, text: str) -> Optional[str]:
+        """处理自然语言命令。返回 None 表示不是命令，交给 AI 处理。"""
+        import re
+        t = text.lower().strip()
+
+        # 模型切换：匹配 "切换模型为lite" / "使用lite模型" / "switch to lite" 等
+        model_patterns = [
+            r'(?:切换|更换|换|改|设置|使用|选择).*?模型.*?(?:为|到|成|用)?\s*(\w+)',
+            r'(?:switch|change|set|use)\s+(?:model\s+(?:to\s+)?)?(\w+)\s*(?:model)?',
+            r'(?:模型|model)\s*(?:切换|换|改|设置|to|=|:)\s*(\w+)',
+            r'(?:用|使用|切换到?)\s*(\w+)\s*模型',
+        ]
+        valid_models = {'lite', 'efficient', 'performance', 'ultimate', 'auto',
+                        'gmodel', 'kmodel', 'mmodel', 'qmodel', 'q35model'}
+        for pattern in model_patterns:
+            m = re.search(pattern, t)
+            if m:
+                model_id = m.group(1).strip()
+                if model_id in valid_models:
+                    return await self._do_switch_model(session_id, model_id)
+
+        # 模式切换
+        mode_patterns = [
+            r'(?:切换|更换|换|改|设置|使用).*?模式.*?(?:为|到|成|用)?\s*(\w+)',
+            r'(?:switch|change|set|use)\s+(?:mode\s+(?:to\s+)?)?(\w+)\s*mode',
+            r'(?:用|使用|切换到?)\s*(\w+)\s*模式',
+        ]
+        for pattern in mode_patterns:
+            m = re.search(pattern, t)
+            if m:
+                mode_id = m.group(1).strip()
+                if mode_id and len(mode_id) < 30:
+                    return await self._do_switch_mode(session_id, mode_id)
+
+        # 清除历史
+        if re.search(r'清[除空].*?(?:会话|历史|记录|对话)|(?:forget|clear|reset)\s*(?:session|history|chat)', t):
+            return self._do_forget(session_id)
+
+        return None
+
+    async def _do_switch_model(self, session_id: str, model_id: str) -> str:
+        if not model_id:
+            return "用法: /model <modelId>\n可用模型: lite, efficient, performance, ultimate, auto"
+        resp = await self._rpc_call("session/set_model", {
+            "sessionId": session_id,
+            "modelId": model_id,
+        }, timeout=10)
+        if resp is not None:
+            logger.info(f"[{self.config.name}] 模型已切换: {model_id}")
+            return f"模型已切换为: {model_id}"
+        return "切换模型失败"
+
+    async def _do_switch_mode(self, session_id: str, mode_id: str) -> str:
+        if not mode_id:
+            return "用法: /mode <modeId>"
+        resp = await self._rpc_call("session/set_mode", {
+            "sessionId": session_id,
+            "modeId": mode_id,
+        }, timeout=10)
+        if resp is not None:
+            logger.info(f"[{self.config.name}] 模式已切换: {mode_id}")
+            return f"模式已切换为: {mode_id}"
+        return "切换模式失败"
+
+    def _do_forget(self, session_id: str) -> str:
+        # 通过 session_id 反查 conversation_key
+        for key, sid in list(self.sessions.items()):
+            if sid == session_id:
+                self.sessions.pop(key, None)
+                break
+        return "会话历史已清除，下次发消息将开启新会话"
+
+    @staticmethod
+    def _do_help() -> str:
+        return """可用命令（斜杠或自然语言均可）:
+
+/model <modelId> - 切换模型
+  可用: lite, efficient, performance, ultimate, auto
+  或直接说: 切换模型为lite / switch to lite model
+
+/mode <modeId> - 切换模式
+
+/forget - 清除当前会话历史
+  或直接说: 清除会话历史 / clear history
+
+/help - 显示此帮助"""
 
     # ------------------------------------------------------------------
     # 发送消息

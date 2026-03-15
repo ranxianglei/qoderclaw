@@ -79,6 +79,13 @@ qoder_instances:
 ### 3. 启动后端
 
 ```bash
+# 使用 CLI 管理脚本（推荐）
+./qoderclaw start      # 启动服务
+./qoderclaw stop       # 停止服务
+./qoderclaw status     # 查看状态
+./qoderclaw restart    # 重启服务
+
+# 或直接运行
 ./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 

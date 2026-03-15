@@ -93,6 +93,13 @@ feishu_bots:
 ### 3. Start the Server
 
 ```bash
+# Using the CLI management script (recommended)
+./qoderclaw start      # Start service
+./qoderclaw stop       # Stop service
+./qoderclaw status     # Show status
+./qoderclaw restart    # Restart service
+
+# Or run directly
 ./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 

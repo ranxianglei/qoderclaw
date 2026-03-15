@@ -237,6 +237,67 @@ class QoderAcpClient:
         return True
 
     # ------------------------------------------------------------------
+    # 命令处理
+    # ------------------------------------------------------------------
+
+    async def _handle_command(self, session_id: str, text: str) -> Optional[str]:
+        """
+        处理以 / 开头的命令。返回命令执行结果，如果不是命令则返回 None。
+
+        支持的命令：
+        - /model <modelId> - 切换模型（如 /model lite, /model pro）
+        - /mode <modeId> - 切换模式
+        - /forget - 清除当前会话历史
+        - /help - 显示帮助
+        """
+        text = text.strip()
+        if not text.startswith("/"):
+            return None
+
+        parts = text.split(None, 1)
+        command = parts[0].lower()
+        args = parts[1] if len(parts) > 1 else ""
+
+        if command == "/model":
+            model_id = args.strip()
+            if not model_id:
+                return "用法: /model <modelId>\n可用模型: lite, efficient, performance, ultimate, auto"
+            resp = await self._rpc_call("session/set_model", {
+                "sessionId": session_id,
+                "modelId": model_id,
+            }, timeout=10)
+            if resp is not None:
+                return f"✓ 模型已切换为: {model_id}"
+            return f"✗ 切换模型失败"
+
+        elif command == "/mode":
+            mode_id = args.strip()
+            if not mode_id:
+                return "用法: /mode <modeId>\n可用模式请参考 Qoder 文档"
+            resp = await self._rpc_call("session/set_mode", {
+                "sessionId": session_id,
+                "modeId": mode_id,
+            }, timeout=10)
+            if resp is not None:
+                return f"✓ 模式已切换为: {mode_id}"
+            return f"✗ 切换模式失败"
+
+        elif command == "/forget":
+            # 销毁会话，下次消息会创建新会话
+            self.sessions.pop(session_id, None)
+            return "✓ 会话历史已清除"
+
+        elif command == "/help":
+            return """可用命令:
+/model <modelId> - 切换模型 (lite, efficient, performance, ultimate, auto)
+/mode <modeId> - 切换模式
+/forget - 清除当前会话历史
+/help - 显示此帮助"""
+
+        else:
+            return f"未知命令: {command}\n输入 /help 查看可用命令"
+
+    # ------------------------------------------------------------------
     # 发送消息
     # ------------------------------------------------------------------
 
@@ -261,6 +322,12 @@ class QoderAcpClient:
         session_id = await self.get_or_create_session(conversation_key)
         if not session_id:
             return None
+
+        # 解析并处理特殊命令（以 / 开头）
+        command_result = await self._handle_command(session_id, text)
+        if command_result is not None:
+            # 命令已被处理，返回结果
+            return command_result
 
         req_id = self._next_id
         self._prompt_texts[req_id] = []

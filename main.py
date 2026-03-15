@@ -6,7 +6,9 @@
 - 提供 REST API 用于运行时管理
 """
 import asyncio
+import json
 import os
+from pathlib import Path
 from typing import Dict, List, Optional
 from contextlib import asynccontextmanager
 
@@ -281,6 +283,142 @@ async def restart_qoder(name: str):
     if not await pm.restart_instance(name):
         raise HTTPException(status_code=500, detail="Failed to restart")
     return {"message": f"{name} restarted"}
+
+
+# -----------------------------------------------------------------------------
+# Qoder Sessions API（用于前端同步）
+# -----------------------------------------------------------------------------
+
+@app.get("/api/qoder-sessions", summary="列出所有 Qoder 会话")
+async def list_qoder_sessions():
+    """从 ~/.qoder/projects 目录读取所有会话"""
+    sessions = []
+    qoder_projects = Path.home() / ".qoder" / "projects"
+    
+    if not qoder_projects.exists():
+        return {"sessions": sessions}
+    
+    for project_dir in qoder_projects.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for session_file in project_dir.glob("*-session.json"):
+            try:
+                with open(session_file, "r") as f:
+                    data = json.load(f)
+                session_id = session_file.stem.replace("-session", "")
+                
+                # 读取 jsonl 文件获取消息数量
+                jsonl_file = project_dir / f"{session_id}.jsonl"
+                message_count = 0
+                if jsonl_file.exists():
+                    with open(jsonl_file, "r") as f:
+                        message_count = sum(1 for _ in f)
+                
+                sessions.append({
+                    "id": session_id,
+                    "title": data.get("title", "Untitled"),
+                    "created_at": data.get("created_at", 0),
+                    "updated_at": data.get("updated_at", 0),
+                    "message_count": message_count,
+                    "working_dir": data.get("working_dir", ""),
+                    "has_transcript": jsonl_file.exists(),
+                })
+            except Exception as e:
+                logger.warning(f"Failed to read session {session_file}: {e}")
+    
+    # 按更新时间倒序排序
+    sessions.sort(key=lambda x: x["updated_at"], reverse=True)
+    return {"sessions": sessions}
+
+
+@app.get("/api/qoder-sessions/{session_id}/transcript", summary="获取会话消息历史")
+async def get_qoder_transcript(session_id: str, limit: int = 0):
+    """读取会话的 jsonl 文件，返回消息列表
+    
+    Args:
+        session_id: 会话 ID
+        limit: 限制返回数量，0 表示返回全部，负数表示返回最后 N 条
+    """
+    qoder_projects = Path.home() / ".qoder" / "projects"
+    
+    for project_dir in qoder_projects.iterdir():
+        if not project_dir.is_dir():
+            continue
+        jsonl_file = project_dir / f"{session_id}.jsonl"
+        if jsonl_file.exists():
+            break
+    else:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    messages = []
+    with open(jsonl_file, "r") as f:
+        for line in f:
+            try:
+                data = json.loads(line)
+                # 只提取用户和助手的文本消息
+                if data.get("type") in ("user", "assistant"):
+                    msg = data.get("message", {})
+                    content = msg.get("content", "")
+                    # 处理多部分内容
+                    if isinstance(content, list):
+                        text_parts = []
+                        for part in content:
+                            if isinstance(part, dict) and part.get("type") == "text":
+                                text_parts.append(part.get("text", ""))
+                            elif isinstance(part, str):
+                                text_parts.append(part)
+                        content = "\n".join(text_parts)
+                    
+                    if content:
+                        messages.append({
+                            "role": msg.get("role", data["type"]),
+                            "content": content,
+                            "timestamp": data.get("timestamp", 0),
+                        })
+            except json.JSONDecodeError:
+                continue
+    
+    total = len(messages)
+    
+    # limit 处理
+    if limit < 0:
+        messages = messages[limit:]  # 最后 N 条
+    elif limit > 0:
+        messages = messages[-limit:] if len(messages) > limit else messages
+    
+    return {"messages": messages, "total": total}
+
+
+@app.delete("/api/qoder-sessions/{session_id}", summary="删除会话")
+async def delete_qoder_session(session_id: str):
+    """删除会话文件"""
+    qoder_projects = Path.home() / ".qoder" / "projects"
+    
+    deleted = False
+    for project_dir in qoder_projects.iterdir():
+        if not project_dir.is_dir():
+            continue
+        for ext in ["-session.json", ".jsonl", ""]:
+            if ext:
+                file_path = project_dir / f"{session_id}{ext}"
+            else:
+                # 删除会话目录
+                file_path = project_dir / session_id
+            if file_path.exists():
+                try:
+                    if file_path.is_dir():
+                        import shutil
+                        shutil.rmtree(file_path)
+                    else:
+                        file_path.unlink()
+                    deleted = True
+                except Exception as e:
+                    logger.warning(f"Failed to delete {file_path}: {e}")
+    
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    return {"message": f"Session {session_id} deleted"}
 
 
 # -----------------------------------------------------------------------------

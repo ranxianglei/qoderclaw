@@ -8,3 +8,5 @@ config.yaml
 *.egg-info/
 dist/
 build/
+qoderclaw.pid
+qoderclaw.pid

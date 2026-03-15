@@ -332,12 +332,13 @@ async def list_qoder_sessions():
 
 
 @app.get("/api/qoder-sessions/{session_id}/transcript", summary="获取会话消息历史")
-async def get_qoder_transcript(session_id: str, limit: int = 0):
+async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0):
     """读取会话的 jsonl 文件，返回消息列表
     
     Args:
         session_id: 会话 ID
         limit: 限制返回数量，0 表示返回全部，负数表示返回最后 N 条
+        offset: 跳过前 N 条消息（用于增量获取新消息）
     """
     qoder_projects = Path.home() / ".qoder" / "projects"
     
@@ -380,11 +381,15 @@ async def get_qoder_transcript(session_id: str, limit: int = 0):
     
     total = len(messages)
     
+    # offset 处理：跳过前 N 条，返回增量消息
+    if offset > 0:
+        messages = messages[offset:]
+    
     # limit 处理
     if limit < 0:
         messages = messages[limit:]  # 最后 N 条
     elif limit > 0:
-        messages = messages[-limit:] if len(messages) > limit else messages
+        messages = messages[:limit] if len(messages) > limit else messages
     
     return {"messages": messages, "total": total}
 

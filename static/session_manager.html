@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Qoder 会话管理</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --sidebar-w: 280px;
+  --bg: #111827;
+  --sidebar-bg: #0f172a;
+  --border: #1e293b;
+  --accent: #6366f1;
+  --accent-hover: #818cf8;
+  --text: #e2e8f0;
+  --text-muted: #64748b;
+  --item-hover: #1e293b;
+  --item-active: #1e293b;
+  --badge-bg: #1e293b;
+  --model-color: #34d399;
+  --mode-color: #60a5fa;
+  --tag-color: #a78bfa;
+  --tag-bg: #1e1b4b;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Inter", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  height: 100vh;
+  display: flex;
+  overflow: hidden;
+  font-size: 14px;
+}
+
+/* ─── Sidebar ─── */
+#sidebar {
+  width: var(--sidebar-w);
+  min-width: var(--sidebar-w);
+  background: var(--sidebar-bg);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+#sidebar-top {
+  padding: 14px 12px 10px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand svg { color: var(--accent); flex-shrink: 0; }
+.brand h1 { font-size: 15px; font-weight: 600; letter-spacing: -.3px; }
+
+.top-actions { display: flex; gap: 6px; }
+
+.btn {
+  display: flex; align-items: center; gap: 5px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  border: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all .15s;
+}
+.btn-primary { background: var(--accent); color: #fff; flex: 1; justify-content: center; }
+.btn-primary:hover { background: var(--accent-hover); }
+.btn-ghost {
+  background: var(--badge-bg);
+  color: var(--text-muted);
+  padding: 6px 9px;
+}
+.btn-ghost:hover { color: var(--text); background: #2d3748; }
+
+/* Search */
+#search-wrap {
+  position: relative;
+}
+#search-input {
+  width: 100%;
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 7px;
+  padding: 7px 10px 7px 30px;
+  color: var(--text);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .15s;
+}
+#search-input:focus { border-color: var(--accent); }
+#search-input::placeholder { color: var(--text-muted); }
+#search-icon {
+  position: absolute; left: 9px; top: 50%; transform: translateY(-50%);
+  color: var(--text-muted); pointer-events: none;
+}
+
+/* Session list */
+#session-list { flex: 1; overflow-y: auto; padding: 6px; }
+#session-list::-webkit-scrollbar { width: 3px; }
+#session-list::-webkit-scrollbar-thumb { background: var(--border); border-radius: 2px; }
+
+.session-item {
+  padding: 10px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  margin-bottom: 2px;
+  border: 1px solid transparent;
+  transition: all .12s;
+  position: relative;
+}
+.session-item:hover { background: var(--item-hover); }
+.session-item.active { background: var(--item-active); border-color: var(--accent); }
+
+.si-row1 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+.si-source {
+  font-size: 10px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+.src-web { background:#1e3a2f; color:#34d399; }
+.src-feishu { background:#1e2d3a; color:#60a5fa; }
+.src-cli { background:#2a1e3a; color:#a78bfa; }
+.src-ui { background:#3a2e1e; color:#fbbf24; }
+.src-qoder { background:#1a2a3a; color:#38bdf8; }
+
+.si-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.si-rename-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 4px;
+  font-size: 11px;
+  flex-shrink: 0;
+  transition: all .12s;
+}
+.session-item:hover .si-rename-btn { opacity: 1; }
+.si-rename-btn:hover { color: var(--accent); }
+
+.si-delete-btn {
+  opacity: 0;
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 16px;
+  flex-shrink: 0;
+  transition: all .12s;
+  line-height: 1;
+}
+.session-item:hover .si-delete-btn { opacity: 1; }
+.si-delete-btn:hover { color: #ef4444; background: rgba(239,68,68,0.1); }
+
+.si-row2 {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.si-meta { font-size: 11px; color: var(--text-muted); }
+.si-model {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #0d2b1e;
+  color: var(--model-color);
+  font-weight: 500;
+}
+.si-mode {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: #0d1e2b;
+  color: var(--mode-color);
+  font-weight: 500;
+}
+
+/* ─── Right: iframe wrapper ─── */
+#main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  position: relative;
+}
+
+/* Session info bar shown above iframe */
+#session-bar {
+  display: none;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 16px;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+  min-height: 42px;
+  flex-shrink: 0;
+}
+#session-bar.visible { display: flex; }
+
+#sb-title { font-size: 14px; font-weight: 600; flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sb-badge {
+  font-size: 11px; padding: 2px 8px; border-radius: 5px;
+  font-weight: 500; flex-shrink: 0;
+}
+.sb-model { background: #0d2b1e; color: var(--model-color); }
+.sb-mode { background: #0d1e2b; color: var(--mode-color); }
+.sb-msgs { background: var(--badge-bg); color: var(--text-muted); }
+.sb-id { font-size: 11px; color: var(--text-muted); font-family: monospace; }
+
+#details-toggle {
+  background: none; border: none;
+  color: var(--text-muted); cursor: pointer;
+  font-size: 12px; padding: 3px 7px;
+  border-radius: 5px; transition: all .12s;
+}
+#details-toggle:hover { color: var(--text); background: var(--badge-bg); }
+
+/* Expandable detail panel */
+#detail-panel {
+  display: none;
+  padding: 10px 16px;
+  background: var(--sidebar-bg);
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  color: var(--text-muted);
+  gap: 16px;
+  flex-wrap: wrap;
+}
+#detail-panel.open { display: flex; }
+.dp-item { display: flex; flex-direction: column; gap: 2px; }
+.dp-label { font-size: 10px; text-transform: uppercase; letter-spacing: .5px; opacity: .6; }
+.dp-value { color: var(--text); font-weight: 500; }
+.dp-tags { display: flex; gap: 4px; flex-wrap: wrap; }
+.dp-tag {
+  font-size: 11px; padding: 1px 7px; border-radius: 10px;
+  background: var(--tag-bg); color: var(--tag-color);
+}
+
+#nextchat-frame {
+  flex: 1;
+  border: none;
+  width: 100%;
+  background: #fff;
+}
+
+/* Empty state */
+#empty-state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  color: var(--text-muted);
+}
+.es-icon { font-size: 52px; }
+.es-title { font-size: 16px; font-weight: 600; color: var(--text); }
+.es-desc { font-size: 13px; text-align: center; line-height: 1.6; max-width: 300px; }
+
+/* ─── Modals ─── */
+.modal-overlay {
+  display: none;
+  position: fixed; inset: 0;
+  background: rgba(0,0,0,.6);
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  backdrop-filter: blur(2px);
+}
+.modal-overlay.show { display: flex; }
+.modal-box {
+  background: #1a2234;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 24px;
+  width: 380px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+.modal-box h3 { font-size: 15px; margin-bottom: 16px; }
+.modal-input {
+  width: 100%;
+  background: var(--badge-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-size: 14px;
+  outline: none;
+  margin-bottom: 6px;
+  transition: border-color .15s;
+}
+.modal-input:focus { border-color: var(--accent); }
+.modal-hint { font-size: 12px; color: var(--text-muted); margin-bottom: 16px; }
+.modal-actions { display: flex; gap: 8px; justify-content: flex-end; }
+.modal-cancel { background: var(--badge-bg); color: var(--text-muted); }
+.modal-confirm { background: var(--accent); color: #fff; }
+</style>
+</head>
+<body>
+
+<!-- ─── Sidebar ─── -->
+<div id="sidebar">
+  <div id="sidebar-top">
+    <div class="brand">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+      </svg>
+      <h1>Qoder 会话</h1>
+    </div>
+    <div class="top-actions">
+      <button class="btn btn-primary" onclick="openNewModal()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        新建会话
+      </button>
+      <button class="btn btn-ghost" title="刷新" onclick="loadSessions()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+      </button>
+    </div>
+    <div id="search-wrap">
+      <svg id="search-icon" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input id="search-input" type="text" placeholder="搜索会话..." oninput="renderSessionList()">
+    </div>
+  </div>
+  <div id="session-list"></div>
+</div>
+
+<!-- ─── Main ─── -->
+<div id="main">
+  <!-- Session info bar -->
+  <div id="session-bar">
+    <div id="sb-title">-</div>
+    <span class="sb-badge sb-model" id="sb-model" style="display:none"></span>
+    <span class="sb-badge sb-mode" id="sb-mode" style="display:none"></span>
+    <span class="sb-badge sb-msgs" id="sb-msgs"></span>
+    <button id="load-full-btn" class="btn btn-ghost" style="display:none;font-size:11px;padding:3px 8px;" onclick="loadFullHistory()">加载全部</button>
+    <button id="details-toggle" onclick="toggleDetails()">详情 ▾</button>
+  </div>
+  <!-- Expandable detail panel -->
+  <div id="detail-panel">
+    <div class="dp-item">
+      <div class="dp-label">会话 ID</div>
+      <div class="dp-value dp-id">-</div>
+    </div>
+    <div class="dp-item">
+      <div class="dp-label">创建时间</div>
+      <div class="dp-value dp-created">-</div>
+    </div>
+    <div class="dp-item">
+      <div class="dp-label">最后活跃</div>
+      <div class="dp-value dp-active">-</div>
+    </div>
+    <div class="dp-item">
+      <div class="dp-label">来源</div>
+      <div class="dp-value dp-source">-</div>
+    </div>
+    <div class="dp-item" id="dp-tags-wrap" style="display:none">
+      <div class="dp-label">标签</div>
+      <div class="dp-tags" id="dp-tags"></div>
+    </div>
+  </div>
+
+  <!-- Empty state or iframe -->
+  <div id="empty-state">
+    <div class="es-icon">💬</div>
+    <div class="es-title">选择一个会话开始</div>
+    <div class="es-desc">左侧列出了来自所有渠道的会话，点击任意会话即可在 Qoder 中继续对话。</div>
+  </div>
+  <iframe id="nextchat-frame" style="display:none" src="" allow="clipboard-write"></iframe>
+</div>
+
+<!-- ─── New session modal ─── -->
+<div class="modal-overlay" id="new-modal">
+  <div class="modal-box">
+    <h3>新建会话</h3>
+    <input class="modal-input" id="new-alias" type="text" placeholder="会话名称（可选）" maxlength="60">
+    <div class="modal-hint">留空则以首条消息作为名称</div>
+    <div class="modal-actions">
+      <button class="btn modal-cancel" onclick="closeNewModal()">取消</button>
+      <button class="btn modal-confirm" onclick="confirmNew()">创建</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Rename modal ─── -->
+<div class="modal-overlay" id="rename-modal">
+  <div class="modal-box">
+    <h3>重命名会话</h3>
+    <input class="modal-input" id="rename-input" type="text" placeholder="输入新名称..." maxlength="60">
+    <div class="modal-hint">这将作为会话在列表中显示的名称</div>
+    <div class="modal-actions">
+      <button class="btn modal-cancel" onclick="closeRenameModal()">取消</button>
+      <button class="btn modal-confirm" onclick="confirmRename()">保存</button>
+    </div>
+  </div>
+</div>
+
+<!-- ─── Delete modal ─── -->
+<div class="modal-overlay" id="delete-modal">
+  <div class="modal-box">
+    <h3>删除会话</h3>
+    <div class="modal-hint" id="delete-target-name" style="font-size:14px;color:var(--text);margin-bottom:12px"></div>
+    <div class="modal-hint" style="color:#f87171;">此操作将永久删除会话数据，无法恢复。</div>
+    <div class="modal-actions">
+      <button class="btn modal-cancel" onclick="closeDeleteModal()">取消</button>
+      <button class="btn" style="background:#dc2626;" onclick="confirmDelete()">删除</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BRIDGE = '';          // 同源 bridge
+const NEXTCHAT = 'http://' + location.hostname + ':3000';  // NextChat 地址
+
+let sessions = [];
+let currentId = null;
+let renameTargetId = null;
+let detailOpen = false;
+
+// ─── 工具 ───
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function timeAgo(tsMs) {
+  // tsMs 可以是毫秒或秒，自动判断
+  if (!tsMs) return '-';
+  const ts = tsMs > 1e12 ? tsMs / 1000 : tsMs;  // 毫秒转秒
+  const d = Date.now()/1000 - ts;
+  if (d < 60) return '刚刚';
+  if (d < 3600) return Math.floor(d/60) + '分钟前';
+  if (d < 86400) return Math.floor(d/3600) + '小时前';
+  return Math.floor(d/86400) + '天前';
+}
+function fmtDate(tsMs) {
+  if (!tsMs) return '-';
+  const ts = tsMs > 1e12 ? tsMs : tsMs * 1000;  // 秒转毫秒
+  return new Date(ts).toLocaleString('zh-CN', {month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit'});
+}
+
+// ─── 加载会话（从 ~/.qoder 持久化数据） ───
+async function loadSessions() {
+  try {
+    const res = await fetch(`${BRIDGE}/api/qoder-sessions`);
+    const data = await res.json();
+    sessions = data.sessions || [];
+    renderSessionList();
+    // 同步刷新 session bar
+    if (currentId) {
+      const s = sessions.find(x => x.id === currentId);
+      if (s) updateSessionBar(s);
+    }
+  } catch(e) {
+    console.error('load sessions failed', e);
+  }
+}
+
+function renderSessionList() {
+  const q = document.getElementById('search-input').value.toLowerCase();
+  const list = document.getElementById('session-list');
+
+  const filtered = q
+    ? sessions.filter(s => (s.title||s.id).toLowerCase().includes(q))
+    : sessions;
+
+  if (!filtered.length) {
+    list.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--text-muted);font-size:13px">${q ? '没有匹配的会话' : '暂无会话'}</div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(s => {
+    const title = s.title || s.id.slice(0, 12) + '...';
+    const active = s.id === currentId ? 'active' : '';
+    const transcriptBadge = s.has_transcript
+      ? `<span class="si-model" style="background:#1a3a2a;color:#4ade80;">${s.message_count}条</span>` : '';
+    return `
+    <div class="session-item ${active}" onclick="openSession('${esc(s.id)}')" data-id="${esc(s.id)}">
+      <div class="si-row1">
+        <span class="si-source src-qoder">Qoder</span>
+        <span class="si-title">${esc(title)}</span>
+        <button class="si-delete-btn" title="删除"
+          onclick="openDeleteModal(event,'${esc(s.id)}','${esc(title)}')">×</button>
+      </div>
+      <div class="si-row2">
+        <span class="si-meta">${timeAgo(s.updated_at)}</span>
+        ${transcriptBadge}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+// ─── 打开会话（恢复 Qoder session） ───
+async function openSession(qoderSessionId) {
+  currentId = qoderSessionId;
+  renderSessionList();
+
+  const s = sessions.find(x => x.id === qoderSessionId);
+
+  // 调用 /api/sessions/resume 恢复会话
+  let convKey = null;
+  try {
+    const res = await fetch(`${BRIDGE}/api/sessions/resume`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ qoder_session_id: qoderSessionId }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      convKey = data.id;  // 用于路由的 conversation key
+    } else {
+      console.error('Failed to resume session:', await res.text());
+      alert('恢复会话失败');
+      return;
+    }
+  } catch(e) {
+    console.error('Resume error:', e);
+    alert('恢复会话失败: ' + e.message);
+    return;
+  }
+
+  // 设置 cookie（路由到恢复的 conversation key）
+  document.cookie = `qoder_session=${encodeURIComponent(convKey)}; path=/; max-age=86400; SameSite=Lax`;
+
+  // 更新顶部栏
+  if (s) updateSessionBar(s);
+
+  // 切换显示
+  document.getElementById('empty-state').style.display = 'none';
+  const frame = document.getElementById('nextchat-frame');
+  frame.style.display = 'block';
+
+  // 加载 NextChat，创建新的本地对话
+  frame.src = 'about:blank';
+  await new Promise(r => setTimeout(r, 50));
+  frame.src = NEXTCHAT + '/#/?new=1';
+
+  // 获取 transcript（默认只加载最后 50 条）
+  if (s && s.has_transcript) {
+    frame.onload = () => {
+      setTimeout(async () => {
+        try {
+          const hRes = await fetch(`${BRIDGE}/api/qoder-sessions/${encodeURIComponent(qoderSessionId)}/transcript?limit=50`);
+          if (hRes.ok) {
+            const hData = await hRes.json();
+            frame.contentWindow.postMessage({
+              type: 'qoder-load-history',
+              messages: hData.messages,
+            }, '*');
+            // 显示加载进度
+            if (hData.total > hData.count) {
+              document.getElementById('sb-msgs').textContent = `${hData.count}/${hData.total} 条`;
+              document.getElementById('load-full-btn').style.display = '';
+              document.getElementById('load-full-btn').dataset.sessionId = qoderSessionId;
+              document.getElementById('load-full-btn').dataset.total = hData.total;
+            } else {
+              document.getElementById('sb-msgs').textContent = `${hData.count} 条`;
+              document.getElementById('load-full-btn').style.display = 'none';
+            }
+          }
+        } catch(e) { console.warn('Failed to load transcript', e); }
+      }, 1500);
+      frame.onload = null;
+    };
+  }
+}
+
+// 加载完整历史
+async function loadFullHistory() {
+  const btn = document.getElementById('load-full-btn');
+  const sessionId = btn.dataset.sessionId;
+  if (!sessionId) return;
+
+  btn.textContent = '加载中...';
+  btn.disabled = true;
+
+  try {
+    const hRes = await fetch(`${BRIDGE}/api/qoder-sessions/${encodeURIComponent(sessionId)}/transcript?limit=0`);
+    if (hRes.ok) {
+      const hData = await hRes.json();
+      const frame = document.getElementById('nextchat-frame');
+      frame.contentWindow.postMessage({
+        type: 'qoder-load-history',
+        messages: hData.messages,
+        replace: true,  // 强制替换已有消息
+      }, '*');
+      document.getElementById('sb-msgs').textContent = `${hData.total} 条`;
+      btn.style.display = 'none';
+    }
+  } catch(e) {
+    console.error('Load full history failed', e);
+    alert('加载失败: ' + e.message);
+  }
+
+  btn.textContent = '加载全部';
+  btn.disabled = false;
+}
+
+function updateSessionBar(s) {
+  const bar = document.getElementById('session-bar');
+  bar.classList.add('visible');
+
+  const title = s.title || s.id.slice(0, 12) + '...';
+  document.getElementById('sb-title').textContent = title;
+
+  const modelEl = document.getElementById('sb-model');
+  modelEl.style.display = 'none';
+
+  const modeEl = document.getElementById('sb-mode');
+  modeEl.style.display = 'none';
+
+  document.getElementById('sb-msgs').textContent = s.message_count + ' 条';
+
+  // detail panel
+  document.querySelector('.dp-id').textContent = s.id;
+  document.querySelector('.dp-created').textContent = fmtDate(s.created_at);
+  document.querySelector('.dp-active').textContent = fmtDate(s.updated_at);
+  document.querySelector('.dp-source').textContent = 'Qoder';
+
+  const tagsWrap = document.getElementById('dp-tags-wrap');
+  const tagsEl = document.getElementById('dp-tags');
+  if (s.tags && s.tags.length) {
+    tagsEl.innerHTML = s.tags.map(t => `<span class="dp-tag">${esc(t)}</span>`).join('');
+    tagsWrap.style.display = '';
+  } else {
+    tagsWrap.style.display = 'none';
+  }
+}
+
+function toggleDetails() {
+  detailOpen = !detailOpen;
+  document.getElementById('detail-panel').classList.toggle('open', detailOpen);
+  document.getElementById('details-toggle').textContent = detailOpen ? '详情 ▴' : '详情 ▾';
+}
+
+// ─── 新建会话 ───
+function openNewModal() {
+  document.getElementById('new-alias').value = '';
+  document.getElementById('new-modal').classList.add('show');
+  setTimeout(() => document.getElementById('new-alias').focus(), 50);
+}
+function closeNewModal() {
+  document.getElementById('new-modal').classList.remove('show');
+}
+async function confirmNew() {
+  const alias = document.getElementById('new-alias').value.trim();
+  closeNewModal();
+
+  // 生成一个临时的 conversation key
+  const tempKey = 'new-' + Math.random().toString(36).slice(2, 10);
+
+  // 设置 cookie
+  document.cookie = `qoder_session=${encodeURIComponent(tempKey)}; path=/; max-age=86400; SameSite=Lax`;
+
+  // 更新顶部栏
+  document.getElementById('session-bar').classList.add('visible');
+  document.getElementById('sb-title').textContent = alias || '新会话';
+  document.getElementById('sb-msgs').textContent = '0 条';
+  document.getElementById('sb-model').style.display = 'none';
+  document.getElementById('sb-mode').style.display = 'none';
+
+  // 切换显示
+  document.getElementById('empty-state').style.display = 'none';
+  const frame = document.getElementById('nextchat-frame');
+  frame.style.display = 'block';
+
+  // 加载 NextChat 创建新会话
+  frame.src = 'about:blank';
+  await new Promise(r => setTimeout(r, 50));
+  frame.src = NEXTCHAT + '/#/?new=1';
+
+  // 刷新列表
+  await loadSessions();
+}
+
+// ─── 重命名 ───
+function openRenameModal(e, id, current) {
+  e.stopPropagation();
+  renameTargetId = id;
+  document.getElementById('rename-input').value = current;
+  document.getElementById('rename-modal').classList.add('show');
+  setTimeout(() => {
+    const inp = document.getElementById('rename-input');
+    inp.focus(); inp.select();
+  }, 50);
+}
+function closeRenameModal() {
+  document.getElementById('rename-modal').classList.remove('show');
+  renameTargetId = null;
+}
+async function confirmRename() {
+  const alias = document.getElementById('rename-input').value.trim();
+  if (!alias || !renameTargetId) { closeRenameModal(); return; }
+  try {
+    // Qoder session 不支持 rename API，直接更新本地显示
+    const s = sessions.find(x => x.id === renameTargetId);
+    if (s) s.title = alias;
+    if (renameTargetId === currentId) {
+      document.getElementById('sb-title').textContent = alias;
+    }
+    renderSessionList();
+  } catch(e) { console.error(e); }
+  closeRenameModal();
+}
+
+// ─── 删除会话 ───
+let deleteTargetId = null;
+let deleteTargetName = '';
+
+function openDeleteModal(e, id, name) {
+  e.stopPropagation();
+  deleteTargetId = id;
+  deleteTargetName = name;
+  document.getElementById('delete-target-name').textContent = `"${name}"`;
+  document.getElementById('delete-modal').classList.add('show');
+}
+
+function closeDeleteModal() {
+  document.getElementById('delete-modal').classList.remove('show');
+  deleteTargetId = null;
+}
+
+async function confirmDelete(mode) {
+  if (!deleteTargetId) { closeDeleteModal(); return; }
+  try {
+    // 使用 Qoder session 删除 API
+    const res = await fetch(`${BRIDGE}/api/qoder-sessions/${encodeURIComponent(deleteTargetId)}`, {
+      method: 'DELETE',
+    });
+    if (res.ok) {
+      // 从本地列表移除
+      sessions = sessions.filter(x => x.id !== deleteTargetId);
+      // 如果删除的是当前打开的会话，清空 iframe
+      if (deleteTargetId === currentId) {
+        currentId = null;
+        document.getElementById('session-bar').classList.remove('visible');
+        document.getElementById('nextchat-frame').style.display = 'none';
+        document.getElementById('empty-state').style.display = 'flex';
+      }
+      renderSessionList();
+    } else {
+      alert('删除失败');
+    }
+  } catch(e) { console.error(e); alert('删除失败: ' + e.message); }
+  closeDeleteModal();
+}
+
+// ─── 键盘快捷键 ───
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { closeRenameModal(); closeNewModal(); closeDeleteModal(); }
+  if (e.key === 'Enter') {
+    if (document.getElementById('rename-modal').classList.contains('show')) confirmRename();
+    if (document.getElementById('new-modal').classList.contains('show')) confirmNew();
+  }
+});
+
+// ─── Init ───
+loadSessions();
+setInterval(loadSessions, 20000);
+</script>
+</body>
+</html>

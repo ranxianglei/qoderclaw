@@ -1,46 +1,48 @@
 # Qoder Bridge
 
-飞书机器人 ↔ Qoder AI 助手 双向桥接器。
+Qoder AI 助手的多平台桥接器，支持飞书机器人和 Web 前端。
 
-**无需公网 IP**，使用飞书 WebSocket 长连接主动接收消息，和 OpenClaw 原理相同。
+**无需公网 IP**，飞书端使用 WebSocket 长连接主动接收消息。
 
 ## 功能特性
 
-- **双端接入**：飞书机器人 + Web 前端
+- **双端接入**：飞书机器人 + Web 前端（NextChat 等 OpenAI 兼容客户端）
 - **流式输出**：实时显示 AI 回复，打字机效果
 - **多模态支持**：
   - 图片：自动压缩后发送给 Qoder 识别
   - 语音：降级为文本提示（Qoder 暂不支持音频）
-- **多实例管理**：每个飞书 Bot 对应独立的 Qoder 进程
-- **控制命令**：`/help`、`/status`、`/restart`、`/forget` 等
+- **多实例管理**：支持多个独立 Qoder 进程
+- **多会话管理**：飞书端支持创建/切换/管理多个会话（交互式卡片）
+- **会话同步**：Web 前端可加载并续用 CLI/飞书中的 Qoder 会话
+- **工具调用可视化**：Web 前端实时显示 Bash/文件操作等工具执行状态
+- **控制命令**：`/help`、`/status`、`/restart`、`/forget`、`/sessions` 等
 - **OpenAI 兼容 API**：任何 OpenAI 兼容前端可直接对接
 
 ## 架构
 
 ```
-                    飞书用户
-                      ↕
-                飞书服务器
-                      ↕ WebSocket
-┌─────────────────────────────────────────────────────────┐
-│                    Qoder Bridge                         │
-│  ┌─────────────┐    ┌─────────────┐    ┌─────────────┐ │
-│  │ 飞书适配器   │    │ OpenAI API  │    │ 管理 API    │ │
-│  │  (WebSocket)│    │  /v1/*      │    │  /api/*     │ │
-│  └──────┬──────┘    └──────┬──────┘    └─────────────┘ │
-│         │                  │                            │
-│         └──────────────────┼─────────────────────────── │
-│                            ↓                            │
-│                    ┌───────────────┐                    │
-│                    │  Qoder ACP    │                    │
-│                    │  (stdin/stdout)│                   │
-│                    └───────┬───────┘                    │
-│                            ↓                            │
-│                      Qoder 进程                         │
-└─────────────────────────────────────────────────────────┘
-                      ↕
-                Web 前端 (NextChat)
-                  http://localhost:3000
+             飞书用户                 Web 用户 (NextChat)
+               ↕                       ↕ HTTP
+          飞书服务器                 localhost:3000
+               ↕ WebSocket              ↕
+┌──────────────────────────────────────────────────────────┐
+│                     Qoder Bridge (:8080)                  │
+│                                                          │
+│  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐   │
+│  │ 飞书适配器    │  │ OpenAI API   │  │  管理 API    │   │
+│  │ (WebSocket)  │  │ /v1/*        │  │  /api/*      │   │
+│  └──────┬───────┘  └──────┬───────┘  └──────────────┘   │
+│         │                 │                              │
+│         └─────────────────┤                              │
+│                           ↓                              │
+│              ┌────────────────────┐                      │
+│              │  会话管理 + ACP    │                      │
+│              │  (多会话隔离)      │                      │
+│              └────────┬───────────┘                      │
+│                       ↓                                  │
+│                 Qoder 进程                                │
+│              (stdin/stdout ACP)                           │
+└──────────────────────────────────────────────────────────┘
 ```
 
 ## 快速开始
@@ -48,7 +50,7 @@
 ### 1. 安装后端
 
 ```bash
-cd /home/dog/qoder-bridge
+cd qoder-bridge
 python3 -m venv venv
 source venv/bin/activate
 pip install -r requirements.txt
@@ -69,7 +71,7 @@ feishu_bots:
 qoder_instances:
   default-assistant:
     name: "default-assistant"
-    workdir: "/home/dog"
+    workdir: "/path/to/your/project"
     cmd: "qodercli"
     auto_start: true
 ```
@@ -127,6 +129,7 @@ PORT=3000 yarn dev
 | `/restart <实例名>` | 重启 Qoder |
 | `/forget` | 清除会话记忆 |
 | `/list` | 列出所有实例 |
+| `/sessions` | 列出所有会话（飞书交互式卡片）|
 | `/health` | 健康检查 |
 
 ## 部署方案
@@ -186,9 +189,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=dog
-WorkingDirectory=/home/dog/qoder-bridge
-ExecStart=/home/dog/qoder-bridge/venv/bin/python main.py --host 0.0.0.0 --port 8080
+User=youruser
+WorkingDirectory=/path/to/qoder-bridge
+ExecStart=/path/to/qoder-bridge/venv/bin/python main.py --host 0.0.0.0 --port 8080
 Restart=always
 RestartSec=5
 
@@ -235,30 +238,49 @@ curl http://localhost:8080/v1/chat/completions \
 
 ### ACP 协议
 
-使用 Agent Client Protocol 与 Qoder 通信：
-- 图片格式：`{"type": "image", "mimeType": "image/jpeg", "data": "<base64>"}`
+使用 Agent Client Protocol (ACP) 与 Qoder 通信：
 - 文字格式：`{"type": "text", "text": "..."}`
+- 图片格式：`{"type": "image", "mimeType": "image/jpeg", "data": "<base64>"}`
+- 工具事件：Bridge 解析 ACP 的 `tool_call` / `tool_call_update` 通知，通过 SSE 流转发给前端
+
+### 会话管理
+
+- **飞书端**：基于 `open_id`（单聊）/ `chat_id`（群聊）自动隔离会话
+- **飞书多会话**：通过交互式卡片（`/sessions`）创建、切换、管理多个独立会话
+- **Web 端**：通过 `qoder_session` Cookie 路由到对应 Qoder 会话
+- **会话同步**：Web 前端可加载 CLI 中已有的 Qoder 会话，实现跨端共享上下文
+- **会话持久化**：会话数据存储在 `~/.qoder/projects/` 目录
+
+### 工具调用可视化
+
+SSE 流中携带工具事件，前端可实时显示：
+- 工具类型（Bash、Read、Write、Edit 等）
+- 执行状态（pending / in_progress / completed / error）
+- 工具输入参数摘要
 
 ## 文件结构
 
 ```
 qoder-bridge/
 ├── adapters/
-│   ├── base.py          # 平台抽象层、消息类型定义
-│   └── feishu.py        # 飞书 WebSocket 适配器
-├── bridge_core.py       # 消息路由、命令处理、图片压缩
-├── qoder_manager.py     # Qoder ACP 进程管理
-├── openai_compat.py     # OpenAI 兼容 API 层
-├── main.py              # FastAPI 服务入口
-├── config.yaml          # 运行时配置（示例）
-├── requirements.txt     # Python 依赖
-├── .gitignore           # Git 忽略配置
-├── README.md            # 本文档
-├── QUICKSTART.md        # 快速开始指南
-├── ARCHITECTURE.md      # 架构设计文档
-└── logs/                # 日志目录
+│   ├── base.py            # 平台抽象层、消息类型定义
+│   └── feishu.py          # 飞书 WebSocket 适配器（含多会话卡片）
+├── bridge_core.py         # 消息路由、命令处理、图片压缩
+├── qoder_manager.py       # Qoder ACP 进程管理、会话生命周期
+├── openai_compat.py       # OpenAI 兼容 API 层（含工具事件 SSE）
+├── main.py                # FastAPI 服务入口
+├── config.py              # 配置模型定义
+├── config.example.yaml    # 配置文件示例
+├── requirements.txt       # Python 依赖
+├── install.sh             # 安装脚本
+├── start.sh               # 启动脚本
+└── .gitignore             # Git 忽略规则
 ```
 
 ## API 文档
 
 服务启动后访问：http://localhost:8080/docs
+
+## License
+
+MIT

@@ -355,7 +355,7 @@ Session:
 ## 📋 文件清单
 
 ```
-/home/dog/qoder-bridge/
+qoder-bridge/
 ├── adapters/
 │   ├── __init__.py          # 包初始化
 │   ├── base.py              # 平台抽象层 (199 行)

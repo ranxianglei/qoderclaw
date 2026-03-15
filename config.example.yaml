@@ -27,7 +27,7 @@ system:
 qoder_instances:
   research-assistant:
     name: "research-assistant"
-    workdir: "/home/dog/projects/research"
+    workdir: "/path/to/your/projects/research"
     cmd: "qoder"
     args: []
     auto_start: true
@@ -35,7 +35,7 @@ qoder_instances:
   
   coding-assistant:
     name: "coding-assistant"
-    workdir: "/home/dog/projects/coding"
+    workdir: "/path/to/your/projects/coding"
     cmd: "qoder"
     args: ["--mode", "code"]
     auto_start: true
@@ -43,7 +43,7 @@ qoder_instances:
   
   devops-assistant:
     name: "devops-assistant"
-    workdir: "/home/dog/projects/devops"
+    workdir: "/path/to/your/projects/devops"
     cmd: "qoder"
     args: []
     auto_start: false

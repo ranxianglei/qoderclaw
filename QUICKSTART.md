@@ -5,7 +5,7 @@
 ### 第一步：安装依赖（2 分钟）
 
 ```bash
-cd /home/dog/qoder-bridge
+cd qoder-bridge
 
 # 运行安装脚本
 ./install.sh
@@ -86,7 +86,7 @@ feishu_bots:
 qoder_instances:
   research-assistant:
     name: "research-assistant"
-    workdir: "/home/dog/your-project"
+    workdir: "/path/to/your-project"
     cmd: "qoder"
     auto_start: true
 ```
@@ -185,7 +185,7 @@ curl http://localhost:8080/health
 which qoder
 
 # 手动测试启动
-cd /home/dog/your-project
+cd /path/to/your-project
 qoder
 
 # 如果失败，检查 Qoder 安装

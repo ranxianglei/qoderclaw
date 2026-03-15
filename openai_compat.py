@@ -184,8 +184,37 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     if not client or client.status != QoderStatus.RUNNING:
         return _error_response(503, "No running Qoder instance available")
 
-    # 从请求头获取 session ID（可选）
-    session_key = request.headers.get("x-session-id", f"web-{uuid.uuid4().hex[:8]}")
+    # 从请求头获取 session ID
+    # 如果没有提供，尝试加载最近使用的会话，避免创建过多新会话
+    session_key = request.headers.get("x-session-id")
+    if not session_key:
+        # 尝试查找最近更新的会话
+        from pathlib import Path
+        qoder_projects = Path.home() / ".qoder" / "projects"
+        latest_session = None
+        latest_time = 0
+        
+        if qoder_projects.exists():
+            for project_dir in qoder_projects.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                for session_file in project_dir.glob("*-session.json"):
+                    try:
+                        import json
+                        with open(session_file, "r") as f:
+                            data = json.load(f)
+                        if data.get("updated_at", 0) > latest_time:
+                            latest_time = data["updated_at"]
+                            latest_session = session_file.stem.replace("-session", "")
+                    except:
+                        continue
+        
+        if latest_session:
+            session_key = latest_session
+            logger.info(f"[openai] No session provided, using latest: {session_key}")
+        else:
+            session_key = f"web-{uuid.uuid4().hex[:8]}"
+            logger.info(f"[openai] No session provided, creating new: {session_key}")
 
     # 提取文本和图片
     text, media_parts = _extract_content(req.messages)

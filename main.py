@@ -366,9 +366,38 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0)
                         for part in content:
                             if isinstance(part, dict) and part.get("type") == "text":
                                 text_parts.append(part.get("text", ""))
+                            elif isinstance(part, dict) and part.get("type") == "image":
+                                # 将图片 base64 数据转为 data URL，嵌入 markdown
+                                source = part.get("source", {})
+                                b64_data = source.get("data", "")
+                                media_type = source.get("media_type", "image/png")
+                                if b64_data:
+                                    data_url = f"data:{media_type};base64,{b64_data}"
+                                    text_parts.append(f"![image]({data_url})")
+                            elif isinstance(part, dict) and part.get("type") == "tool_use":
+                                # 显示工具调用
+                                tool_name = part.get("name", "unknown")
+                                tool_input = part.get("input", {})
+                                tool_desc = f"🛠️ **Tool**: `{tool_name}`"
+                                if tool_input:
+                                    tool_desc += f"\n```json\n{json.dumps(tool_input, ensure_ascii=False, indent=2)}\n```"
+                                text_parts.append(tool_desc)
+                            elif isinstance(part, dict) and part.get("type") == "tool_result":
+                                # 显示工具结果
+                                result_content = part.get("content", [])
+                                if isinstance(result_content, list) and result_content:
+                                    # 提取结果中的文本
+                                    result_texts = []
+                                    for rc in result_content:
+                                        if isinstance(rc, dict) and rc.get("type") == "text":
+                                            result_texts.append(rc.get("text", ""))
+                                    if result_texts:
+                                        text_parts.append("📤 **Result**:\n" + "\n".join(result_texts))
+                                elif isinstance(result_content, str):
+                                    text_parts.append(f"📤 **Result**: {result_content}")
                             elif isinstance(part, str):
                                 text_parts.append(part)
-                        content = "\n".join(text_parts)
+                        content = "\n\n".join(text_parts)
                     
                     if content:
                         messages.append({

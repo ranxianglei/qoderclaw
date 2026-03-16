@@ -73,6 +73,7 @@ class QoderAcpClient:
         self._pending: Dict[int, asyncio.Future] = {}  # req_id → Future[result]
         self._prompt_texts: Dict[int, list] = {}  # req_id → [text_chunks]
         self._prompt_callbacks: Dict[int, Callable[[str], None]] = {}  # req_id → chunk callback
+        self._seen_tool_calls: set = set()  # 去重 tool_call 通知
         self._reader_task: Optional[asyncio.Task] = None
         self._status = QoderStatus.STOPPED
         self._start_time: Optional[float] = None
@@ -652,6 +653,9 @@ class QoderAcpClient:
             update = params.get("update", {})
             update_type = update.get("sessionUpdate", "")
 
+            # 记录所有 update 类型用于调试
+            logger.debug(f"[{self.config.name}] session/update type={update_type}")
+
             # 收集文本流
             if update_type == "agent_message_chunk":
                 content = update.get("content", {})
@@ -674,6 +678,73 @@ class QoderAcpClient:
                                     callback(chunk_text)
                                 except Exception as e:
                                     logger.error(f"[{self.config.name}] chunk callback error: {e}")
+
+            # 工具调用事件 → 格式化为文本推送给前端
+            elif update_type == "tool_call":
+                tool_call_id = update.get("toolCallId", "")
+                dedup_key = f"call:{tool_call_id}"
+                if dedup_key in self._seen_tool_calls:
+                    return  # 去重
+                self._seen_tool_calls.add(dedup_key)
+                # ACP 格式: title="`echo hello`", rawInput={command:..., description:...}, kind="execute"
+                title = update.get("title", "")
+                raw_input = update.get("rawInput", {})
+                # 从 rawInput 推断工具名称
+                tool_name = "Bash" if "command" in raw_input else \
+                            "Edit" if "file_path" in raw_input and "old_string" in raw_input else \
+                            "Read" if "file_path" in raw_input and "old_string" not in raw_input else \
+                            "Write" if "content" in raw_input and "file_path" in raw_input else \
+                            "Grep" if "pattern" in raw_input else \
+                            "Glob" if "pattern" in raw_input and "glob" in str(raw_input).lower() else \
+                            title or "Tool"
+                formatted = f"\n\n🛠️ **Tool**: `{tool_name}`\n```json\n{json.dumps(raw_input, ensure_ascii=False, indent=2)}\n```\n\n"
+                for req_id in list(self._prompt_texts.keys()):
+                    self._prompt_texts[req_id].append(formatted)
+                    callback = self._prompt_callbacks.get(req_id)
+                    if callback:
+                        try:
+                            callback(formatted)
+                        except Exception as e:
+                            logger.error(f"[{self.config.name}] tool_call callback error: {e}")
+
+            elif update_type == "tool_call_update":
+                tool_call_id = update.get("toolCallId", "")
+                dedup_key = f"update:{tool_call_id}"
+                if dedup_key in self._seen_tool_calls:
+                    return  # 去重
+                self._seen_tool_calls.add(dedup_key)
+                # ACP 格式: rawOutput=[{content: "...", exitCode: 0, ...}], content=[{content:{text:...}}]
+                result_text = ""
+                # 优先从 rawOutput 获取（更原始）
+                raw_output = update.get("rawOutput", [])
+                if isinstance(raw_output, list) and raw_output:
+                    parts = []
+                    for item in raw_output:
+                        if isinstance(item, dict) and item.get("content"):
+                            parts.append(str(item["content"]))
+                    result_text = "\n".join(parts)
+                # 回退到 content 字段
+                if not result_text:
+                    content_list = update.get("content", [])
+                    if isinstance(content_list, list):
+                        for item in content_list:
+                            if isinstance(item, dict):
+                                inner = item.get("content", {})
+                                if isinstance(inner, dict) and inner.get("text"):
+                                    result_text = inner["text"]
+                                    break
+                if result_text:
+                    if len(result_text) > 2000:
+                        result_text = result_text[:2000] + "\n...(truncated)"
+                    formatted = f"\n\n📤 **Result**:\n```\n{result_text}\n```\n\n"
+                    for req_id in list(self._prompt_texts.keys()):
+                        self._prompt_texts[req_id].append(formatted)
+                        callback = self._prompt_callbacks.get(req_id)
+                        if callback:
+                            try:
+                                callback(formatted)
+                            except Exception as e:
+                                logger.error(f"[{self.config.name}] tool_call_update callback error: {e}")
         # 其他通知类型静默忽略
 
     def get_stats(self) -> Optional[ProcessStats]:

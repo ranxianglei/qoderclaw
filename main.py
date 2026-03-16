@@ -307,12 +307,30 @@ async def list_qoder_sessions():
                     data = json.load(f)
                 session_id = session_file.stem.replace("-session", "")
                 
-                # 读取 jsonl 文件获取消息数量
+                # 读取 jsonl 文件获取消息数量（只计算 user/assistant 的实际消息）
                 jsonl_file = project_dir / f"{session_id}.jsonl"
                 message_count = 0
                 if jsonl_file.exists():
                     with open(jsonl_file, "r") as f:
-                        message_count = sum(1 for _ in f)
+                        for line in f:
+                            try:
+                                entry = json.loads(line)
+                                if entry.get("type") in ("user", "assistant"):
+                                    msg = entry.get("message", {})
+                                    content = msg.get("content", "")
+                                    # 与 transcript API 一致：需要有实际内容
+                                    if isinstance(content, list):
+                                        has_content = any(
+                                            (isinstance(p, dict) and p.get("type") in ("text", "image", "tool_use", "tool_result"))
+                                            or isinstance(p, str)
+                                            for p in content
+                                        )
+                                        if has_content:
+                                            message_count += 1
+                                    elif content:
+                                        message_count += 1
+                            except json.JSONDecodeError:
+                                continue
                 
                 sessions.append({
                     "id": session_id,
@@ -332,13 +350,14 @@ async def list_qoder_sessions():
 
 
 @app.get("/api/qoder-sessions/{session_id}/transcript", summary="获取会话消息历史")
-async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0):
+async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0, count_only: bool = False):
     """读取会话的 jsonl 文件，返回消息列表
     
     Args:
         session_id: 会话 ID
         limit: 限制返回数量，0 表示返回全部，负数表示返回最后 N 条
         offset: 跳过前 N 条消息（用于增量获取新消息）
+        count_only: 只返回消息总数，不返回消息内容（轻量级检查用）
     """
     qoder_projects = Path.home() / ".qoder" / "projects"
     
@@ -350,6 +369,53 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0)
             break
     else:
         raise HTTPException(status_code=404, detail="Session not found")
+    
+    # count_only 模式：快速计数，跳过完整内容构建
+    if count_only:
+        count = 0
+        with open(jsonl_file, "r") as f:
+            for line in f:
+                try:
+                    data = json.loads(line)
+                    if data.get("type") in ("user", "assistant"):
+                        msg = data.get("message", {})
+                        content = msg.get("content", "")
+                        if isinstance(content, list):
+                            # 快速检查是否有实质内容（不构建完整字符串）
+                            has_content = False
+                            for part in content:
+                                if isinstance(part, str) and part.strip():
+                                    has_content = True
+                                    break
+                                if isinstance(part, dict):
+                                    ptype = part.get("type")
+                                    if ptype == "text" and part.get("text", "").strip():
+                                        has_content = True
+                                        break
+                                    elif ptype == "image" and part.get("source", {}).get("data"):
+                                        has_content = True
+                                        break
+                                    elif ptype == "tool_use":
+                                        has_content = True
+                                        break
+                                    elif ptype == "tool_result":
+                                        rc = part.get("content", [])
+                                        if isinstance(rc, str) and rc.strip():
+                                            has_content = True
+                                            break
+                                        if isinstance(rc, list) and any(
+                                            isinstance(r, dict) and r.get("type") == "text" and r.get("text", "").strip()
+                                            for r in rc
+                                        ):
+                                            has_content = True
+                                            break
+                            if has_content:
+                                count += 1
+                        elif content and content.strip():
+                            count += 1
+                except json.JSONDecodeError:
+                    continue
+        return {"messages": [], "total": count}
     
     messages = []
     with open(jsonl_file, "r") as f:

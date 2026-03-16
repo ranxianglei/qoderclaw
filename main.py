@@ -400,8 +400,31 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0)
                         content = "\n\n".join(text_parts)
                     
                     if content:
+                        # 判断消息角色
+                        role = msg.get("role", data["type"])
+                        
+                        # 如果消息包含 tool_result，将其视为 assistant 消息（而不是 user）
+                        # 因为 tool_result 是 AI 工具调用的结果，应该显示在 AI 回复中
+                        msg_content = msg.get("content", [])
+                        has_tool_result = False
+                        if isinstance(msg_content, list):
+                            for part in msg_content:
+                                if isinstance(part, dict) and part.get("type") == "tool_result":
+                                    has_tool_result = True
+                                    break
+                        
+                        # 如果只有 tool_result 没有其他文本内容，标记为 assistant
+                        if has_tool_result and role == "user":
+                            # 检查是否只有 tool_result 没有其他文本
+                            non_tool_parts = [
+                                p for p in msg_content 
+                                if isinstance(p, dict) and p.get("type") not in ("tool_result", "tool_use")
+                            ] if isinstance(msg_content, list) else []
+                            if not non_tool_parts:
+                                role = "assistant"
+                        
                         messages.append({
-                            "role": msg.get("role", data["type"]),
+                            "role": role,
                             "content": content,
                             "timestamp": data.get("timestamp", 0),
                         })

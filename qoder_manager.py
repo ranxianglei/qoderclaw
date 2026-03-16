@@ -105,6 +105,7 @@ class QoderAcpClient:
 
             logger.info(f"[{self.config.name}] 启动 ACP 进程: {' '.join(cmd)}")
 
+            # 增加 StreamReader 的 limit 到 10MB，避免处理大型工具调用响应时超过默认 64KB 限制
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(workdir),
@@ -112,6 +113,7 @@ class QoderAcpClient:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                limit=10 * 1024 * 1024,  # 10MB
             )
 
             self._start_time = time.time()

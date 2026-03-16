@@ -86,7 +86,7 @@ qoder_instances:
 ./qoderclaw restart    # 重启服务
 
 # 或直接运行
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
 ### 4. 安装并启动前端（可选）
@@ -155,7 +155,7 @@ PORT=3000 yarn start
 
 ```bash
 # 只需启动 Bridge
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
 ### 方案二：仅 Web 前端（无需飞书）
@@ -164,7 +164,7 @@ PORT=3000 yarn start
 
 ```bash
 # 1. 启动 Bridge（config.yaml 中不配置 feishu_bots 即可）
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+./venv/bin/python main.py --host 127.0.0.1 --port 8080
 
 # 2. 启动 NextChat 前端
 cd ~/frontend/nextchat
@@ -206,7 +206,7 @@ After=network.target
 Type=simple
 User=youruser
 WorkingDirectory=/path/to/qoderclaw
-ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 0.0.0.0 --port 8080
+ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 

@@ -28,7 +28,7 @@ class FeishuBotConfig(BaseSettings):
 class SystemConfig(BaseSettings):
     """系统级配置"""
     # 服务配置
-    host: str = Field(default="0.0.0.0", description="监听地址")
+    host: str = Field(default="127.0.0.1", description="监听地址 (默认 localhost)")
     port: int = Field(default=8080, description="监听端口")
     
     # Redis 配置

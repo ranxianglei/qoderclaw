@@ -106,7 +106,7 @@ qoder_instances:
 ======================================
 启动 QoderClaw
 ======================================
-INFO:     Starting QoderClaw on 0.0.0.0:8080
+INFO:     Starting QoderClaw on 127.0.0.1:8080
 INFO:     Application startup complete.
 ```
 

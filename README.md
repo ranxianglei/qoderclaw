@@ -100,7 +100,7 @@ feishu_bots:
 ./qoderclaw restart    # Restart service
 
 # Or run directly
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
 ### 4. Connect a Web Frontend (Optional)
@@ -160,7 +160,7 @@ Control commands:
 ### Option A: Lark Bot Only
 
 ```bash
-./venv/bin/python main.py --host 0.0.0.0 --port 8080
+./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
 ### Option B: Web Frontend Only (No Lark)
@@ -185,7 +185,7 @@ After=network.target
 Type=simple
 User=youruser
 WorkingDirectory=/path/to/qoderclaw
-ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 0.0.0.0 --port 8080
+ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
 

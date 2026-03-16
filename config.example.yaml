@@ -2,7 +2,7 @@
 
 # 系统配置
 system:
-  host: "0.0.0.0"
+  host: "127.0.0.1"  # localhost only for security
   port: 8080
   
   # Redis 配置（用于会话存储）

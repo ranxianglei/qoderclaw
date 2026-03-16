@@ -107,7 +107,7 @@ im.message.receive_v1     # 接收消息事件（核心）
 ```yaml
 # 系统配置
 system:
-  host: "0.0.0.0"
+  host: "127.0.0.1"  # localhost only
   port: 8080
   log_level: "INFO"
   log_file: "logs/qoderclaw.log"

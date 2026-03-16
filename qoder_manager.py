@@ -105,7 +105,12 @@ class QoderAcpClient:
 
             logger.info(f"[{self.config.name}] 启动 ACP 进程: {' '.join(cmd)}")
 
-            # 增加 StreamReader 的 limit 到 10MB，避免处理大型工具调用响应时超过默认 64KB 限制
+            # 使用超大 buffer size 避免大型 JSON 响应超过限制
+            # asyncio StreamReader 的 limit 参数定义了 readline() 的单行最大字节数
+            # 当 Qoder 返回大型工具调用结果时，JSON 可能非常长
+            # 设置为 1GB (1024^3) 基本可以处理所有实际场景
+            # 内存影响：这只是上限，实际只使用需要的内存
+            BUFFER_SIZE = 1024 * 1024 * 1024  # 1GB
             self.process = await asyncio.create_subprocess_exec(
                 *cmd,
                 cwd=str(workdir),
@@ -113,7 +118,7 @@ class QoderAcpClient:
                 stdin=asyncio.subprocess.PIPE,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
-                limit=10 * 1024 * 1024,  # 10MB
+                limit=BUFFER_SIZE,
             )
 
             self._start_time = time.time()

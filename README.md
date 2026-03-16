@@ -6,6 +6,30 @@ Multi-platform bridge for [Qoder](https://qoder.com) AI assistant. Connect Qoder
 
 **No public IP required** - Lark/Feishu uses WebSocket for message delivery.
 
+---
+
+## 🤖 AI Installation (Recommended)
+
+**Let AI install it for you!** Copy the prompt from [`qoderclaw-install-prompt.md`](qoderclaw-install-prompt.md) to any AI assistant, and it will:
+
+✅ Auto-check qodercli installation  
+✅ Detect and update npm/Node.js if needed  
+✅ Skip Feishu/Lark configuration (web-only mode)  
+✅ Configure secure localhost-only access (127.0.0.1)  
+✅ Set up everything automatically  
+
+**Just paste this prompt to your AI assistant:**
+
+```
+See: qoderclaw-install-prompt.md
+```
+
+---
+
+## Manual Installation
+
+If you prefer to install manually, follow the steps below.
+
 ## Features
 
 - **Dual access** - Lark/Feishu bot + Web frontend (NextChat or any OpenAI-compatible client)

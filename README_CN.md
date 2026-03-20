@@ -141,7 +141,6 @@ docker run -d \
 # 克隆 QoderClaw 集成版
 git clone https://github.com/ranxianglei/open-webui.git
 cd open-webui
-git checkout qoderclaw-integration
 
 # 后端
 cd backend

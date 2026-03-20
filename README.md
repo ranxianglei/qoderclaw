@@ -139,7 +139,6 @@ git clone https://github.com/ranxianglei/open-webui.git
 cd open-webui
 
 # Checkout the integration branch
-git checkout qoderclaw-integration
 
 # Build and run with Docker (recommended)
 docker run -d \

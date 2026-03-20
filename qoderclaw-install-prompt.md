@@ -7,7 +7,7 @@
 ## 安装任务提示词
 
 ```
-请帮我安装 QoderClaw（Qoder AI 助手的多平台桥接服务）及其前端 NextChat-Qoder。
+请帮我安装 QoderClaw（Qoder AI 助手的多平台桥接服务）及其前端 Open WebUI。
 
 ### 安装要求
 
@@ -30,23 +30,14 @@
     ```
   - 如果已安装，记录路径（如 `/home/ubuntu/.local/bin/qodercli`）
 
-- **检查 Node.js 和 npm 版本**：
+- **检查 Docker 是否已安装**：
   ```bash
-  node --version
-  npm --version
+  docker --version || echo "未安装"
   ```
-  - 检查 npm 是否有更新版本：`npm view npm version`
-  - 如果当前版本不是最新，**不要升级系统 npm**，而是在 `~/mysoft` 目录下安装最新的 Node.js：
-    ```bash
-    # 下载最新版 Node.js
-    cd ~/mysoft
-    curl -fsSLO https://nodejs.org/dist/latest-v20.x/node-v20.x.x-linux-x64.tar.xz
-    tar -xf node-v20.x.x-linux-x64.tar.xz
-    rm node-v20.x.x-linux-x64.tar.xz
-    
-    # 更新环境变量（添加到 ~/.bashrc）
-    echo 'export PATH=$HOME/mysoft/node-v20.x.x-linux-x64/bin:$PATH' >> ~/.bashrc
-    source ~/.bashrc
+  - 如果未安装，提示用户安装 Docker：
+    ```
+    ❌ 未检测到 Docker，Open WebUI 前端需要 Docker 运行。
+    请参考 https://docs.docker.com/engine/install/ 安装 Docker。
     ```
 
 #### 2. 安装后端（QoderClaw）
@@ -79,11 +70,6 @@ system:
   host: "127.0.0.1"  # 只监听 localhost
   port: 8080
   
-  # Redis 配置（可选，不需要可注释）
-  # redis_host: "localhost"
-  # redis_port: 6379
-  # redis_db: 0
-  
   log_level: "INFO"
   log_file: "logs/qoderclaw.log"
 
@@ -107,27 +93,34 @@ feishu_bots: {}
 - **不要配置任何飞书机器人**
 - `host` 必须是 `127.0.0.1`（只允许本地访问）
 
-#### 4. 安装前端（NextChat-Qoder）
+#### 4. 部署前端（Open WebUI）
+
+使用 Docker 部署 Open WebUI（QoderClaw 集成版）：
 
 ```bash
-# 克隆前端到 ~/mysoft/frontend
-cd ~/mysoft
-mkdir -p frontend
-cd frontend
-git clone https://github.com/ranxianglei/nextchat-qoder.git nextchat
-cd nextchat
+docker run -d \
+  --name open-webui \
+  --restart always \
+  -p 3001:8080 \
+  -e ENABLE_SIGNUP=true \
+  -e DEFAULT_USER_ROLE=user \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
+  -e OPENAI_API_KEY=sk-qoderclaw \
+  -e DEFAULT_MODEL=default-assistant \
+  -e ENABLE_OLLAMA_API=false \
+  -v open-webui-data:/app/backend/data \
+  --add-host=host.docker.internal:host-gateway \
+  ghcr.io/open-webui/open-webui:main
+```
 
-# 安装依赖
-npm install
+等待容器启动（约 10-15 秒），然后验证：
 
-# 创建环境配置文件
-cat > .env.local << 'EOF'
-OPENAI_API_KEY=sk-qoderclaw
-BASE_URL=http://127.0.0.1:8080
-HIDE_USER_API_KEY=1
-CUSTOM_MODELS=+default-assistant
-DEFAULT_MODEL=default-assistant
-EOF
+```bash
+# 等待启动
+sleep 15
+
+# 检查容器状态
+docker ps | grep open-webui
 ```
 
 #### 5. 启动服务
@@ -139,28 +132,24 @@ cd ~/mysoft/qoderclaw
 echo $! > /tmp/qoderclaw-backend.pid
 ```
 
-**启动前端**：
-```bash
-cd ~/mysoft/frontend/nextchat
-HOSTNAME=127.0.0.1 npm run start &
-echo $! > /tmp/qoderclaw-frontend.pid
-```
+**前端已通过 Docker 自动启动**，无需额外操作。
 
 #### 6. 验证安装
 
 ```bash
-# 等待 10 秒让服务启动
+# 等待服务启动
 sleep 10
 
 # 检查后端健康状态
 curl -s http://127.0.0.1:8080/health | jq
 
 # 检查前端是否可访问
-curl -s http://127.0.0.1:3000 | head -5
+curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:3001
 
 # 测试聊天 API
 curl -s -X POST http://127.0.0.1:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-qoderclaw" \
   -d '{
     "model": "default-assistant",
     "messages": [{"role": "user", "content": "Hello"}]
@@ -178,7 +167,7 @@ curl -s -X POST http://127.0.0.1:8080/v1/chat/completions \
   服务信息
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   后端地址：http://127.0.0.1:8080
-  前端地址：http://127.0.0.1:3000
+  前端地址：http://127.0.0.1:3001
   API 文档：http://127.0.0.1:8080/docs
 
   Qoder 工作目录：<USER_PROJECT_PATH>
@@ -187,37 +176,39 @@ curl -s -X POST http://127.0.0.1:8080/v1/chat/completions \
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   使用说明
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  1. 在浏览器中打开：http://127.0.0.1:3000
-  2. 开始与 Qoder AI 对话
+  1. 在浏览器中打开：http://127.0.0.1:3001
+  2. 首次访问需要创建管理员账号
+  3. 开始与 Qoder AI 对话
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   管理命令
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   查看状态：
-    ps aux | grep -E "main.py|next"
+    ps aux | grep main.py
+    docker ps | grep open-webui
 
   停止服务：
     kill $(cat /tmp/qoderclaw-backend.pid)
-    kill $(cat /tmp/qoderclaw-frontend.pid)
+    docker stop open-webui
 
   重启后端：
     cd ~/mysoft/qoderclaw && ./venv/bin/python main.py --host 127.0.0.1 --port 8080 &
 
   重启前端：
-    cd ~/mysoft/frontend/nextchat && HOSTNAME=127.0.0.1 npm run start &
+    docker restart open-webui
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ```
 
 ### 注意事项
 
 1. **安全要求**：
-   - 所有服务必须只监听 `127.0.0.1`（localhost）
-   - 不允许绑定到 `0.0.0.0` 或公网 IP
+   - QoderClaw 只监听 `127.0.0.1`（localhost）
+   - Open WebUI 通过 Docker 端口映射到 `127.0.0.1:3001`
    - 不配置任何外部 API 密钥（飞书、OpenAI 等）
 
-2. **npm 处理**：
-   - 如果系统 npm 不是最新，在 `~/mysoft` 下安装独立的 Node.js
-   - 不要修改系统的 npm/node
+2. **Docker 要求**：
+   - Open WebUI 前端通过 Docker 容器运行
+   - 数据持久化通过 Docker volume `open-webui-data`
 
 3. **qodercli 依赖**：
    - 必须先检测 qodercli 是否存在
@@ -240,4 +231,4 @@ curl -s -X POST http://127.0.0.1:8080/v1/chat/completions \
 
 - **安装目录**：将所有的 `~/mysoft` 改为你想要的路径
 - **项目路径**：`<USER_PROJECT_PATH>` 改为你的实际项目路径
-- **Node.js 版本**：将 `latest-v20.x` 改为你需要的版本
+- **前端端口**：将 `-p 3001:8080` 中的 `3001` 改为你想要的端口

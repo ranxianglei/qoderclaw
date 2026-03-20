@@ -32,7 +32,7 @@ If you prefer to install manually, follow the steps below.
 
 ## Features
 
-- **Dual access** - Lark/Feishu bot + Web frontend (NextChat or any OpenAI-compatible client)
+- **Dual access** - Lark/Feishu bot + Web frontend (Open WebUI or any OpenAI-compatible client)
 - **Streaming output** - Real-time AI responses with typewriter effect
 - **Multimodal** - Image recognition (auto-compressed), voice/file graceful degradation
 - **Multi-instance** - Run multiple independent Qoder processes
@@ -45,9 +45,9 @@ If you prefer to install manually, follow the steps below.
 ## Architecture
 
 ```
-          Lark/Feishu User            Web User (NextChat)
+          Lark/Feishu User            Web User (Open WebUI)
                |                          | HTTP
-          Lark Server                localhost:3000
+          Lark Server                localhost:3001
                | WebSocket                |
 +---------------------------------------------------------+
 |                    QoderClaw (:8080)                     |
@@ -127,34 +127,79 @@ feishu_bots:
 ./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
-### 4. Connect a Web Frontend (Optional)
+### 4. Connect Open WebUI (Optional)
 
-Using [nextchat-qoder](https://github.com/ranxianglei/nextchat-qoder) (NextChat fork with QoderClaw integration):
+QoderClaw integrates with [Open WebUI](https://github.com/ranxianglei/open-webui) for a full-featured web interface with session management.
+
+#### Deploy Open WebUI with QoderClaw Integration
 
 ```bash
-git clone https://github.com/ranxianglei/nextchat-qoder.git ~/frontend/nextchat
-cd ~/frontend/nextchat
-yarn install
+# Clone the QoderClaw-integrated fork
+git clone https://github.com/ranxianglei/open-webui.git
+cd open-webui
 
-cat > .env.local << 'EOF'
-OPENAI_API_KEY=sk-qoderclaw
-BASE_URL=http://localhost:8080
-HIDE_USER_API_KEY=1
-CUSTOM_MODELS=+default-assistant
-DEFAULT_MODEL=default-assistant
-EOF
+# Checkout the integration branch
+git checkout qoderclaw-integration
 
-# Development mode (hot reload, slower first load)
-PORT=3000 yarn dev
-
-# OR Production mode (faster, recommended for deployment)
-yarn build
-PORT=3000 yarn start
+# Build and run with Docker (recommended)
+docker run -d \
+  --name open-webui \
+  --restart always \
+  -p 3001:8080 \
+  -e ENABLE_SIGNUP=true \
+  -e DEFAULT_USER_ROLE=user \
+  -e OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1 \
+  -e OPENAI_API_KEY=sk-qoderclaw \
+  -e DEFAULT_MODEL=default-assistant \
+  -e ENABLE_OLLAMA_API=false \
+  -v open-webui:/app/backend/data \
+  ghcr.io/open-webui/open-webui:main
 ```
 
-Open http://localhost:3000 in your browser.
+Or run from source:
 
-**Note:** Production mode is much faster (~500ms startup vs slow compilation in dev mode). Use `yarn dev` for development with hot reload, `yarn build && yarn start` for production.
+```bash
+# Backend setup
+cd backend
+pip install -r requirements.txt
+
+# Frontend setup
+cd ..
+npm install
+npm run build
+
+# Start the server
+./start.sh
+```
+
+#### Configure Open WebUI Connection
+
+1. Open http://localhost:3001
+2. Create an admin account
+3. Go to **Settings** → **Connections**
+4. Add OpenAI API connection:
+   - **API URL**: `http://localhost:8080/v1` (or your QoderClaw host)
+   - **API Key**: `sk-qoderclaw` (or any value, QoderClaw validates via `QODERCLAW_API_KEY` env)
+5. Verify the model `default-assistant` appears in the model list
+
+#### Session Management Features
+
+With the QoderClaw integration, Open WebUI provides:
+
+- **Qoder Sessions Page**: Access at `/static/qoder-sessions.html`
+  - View all QoderClaw sessions with message counts
+  - Click "Continue Session" to import any session into Open WebUI
+
+- **Cross-Platform Session Sync**:
+  - Sessions created in Lark/Feishu appear in the sessions list
+  - Continue CLI sessions in the web UI with full context
+  - Messages persist across platforms
+
+- **Session Import Flow**:
+  1. Visit `/static/qoder-sessions.html` to see all QoderClaw sessions
+  2. Click "Continue Session" on any session
+  3. Session is imported into Open WebUI with same ID
+  4. Continue chatting - new messages sync to QoderClaw transcript
 
 ### 5. Use via Lark/Feishu (Optional)
 
@@ -187,17 +232,17 @@ Control commands:
 ./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
-### Option B: Web Frontend Only (No Lark)
+### Option B: Open WebUI Only (No Lark)
 
-Skip `feishu_bots` in config, then start the server and frontend.
+Skip `feishu_bots` in config, then start the server and Open WebUI.
 
-### Option C: Both
+### Option C: Full Stack (Lark + Open WebUI)
 
-Configure both `feishu_bots` and `qoder_instances`, start the server, then the frontend. Both share the same Qoder instance.
+Configure both `feishu_bots` and `qoder_instances`, start QoderClaw, then deploy Open WebUI. All platforms share the same Qoder instances and sessions.
 
 ### Production Deployment
 
-**systemd service:**
+**QoderClaw systemd service:**
 
 ```ini
 # /etc/systemd/system/qoderclaw.service
@@ -212,9 +257,38 @@ WorkingDirectory=/path/to/qoderclaw
 ExecStart=/path/to/qoderclaw/venv/bin/python main.py --host 127.0.0.1 --port 8080
 Restart=always
 RestartSec=5
+Environment="QODERCLAW_API_KEY=your-secure-api-key"
 
 [Install]
 WantedBy=multi-user.target
+```
+
+**Open WebUI Docker Compose:**
+
+```yaml
+version: '3.8'
+
+services:
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    container_name: open-webui
+    restart: always
+    ports:
+      - "3001:8080"
+    environment:
+      - ENABLE_SIGNUP=true
+      - DEFAULT_USER_ROLE=user
+      - OPENAI_API_BASE_URL=http://host.docker.internal:8080/v1
+      - OPENAI_API_KEY=sk-qoderclaw
+      - DEFAULT_MODEL=default-assistant
+      - ENABLE_OLLAMA_API=false
+    volumes:
+      - open-webui-data:/app/backend/data
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+volumes:
+  open-webui-data:
 ```
 
 ## Technical Details
@@ -229,12 +303,21 @@ WantedBy=multi-user.target
 ```bash
 curl http://localhost:8080/v1/chat/completions \
   -H "Content-Type: application/json" \
+  -H "Authorization: Bearer sk-qoderclaw" \
   -d '{
     "model": "default-assistant",
     "messages": [{"role": "user", "content": "Hello"}],
     "stream": true
   }'
 ```
+
+### QoderClaw Management API
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/sessions` | List all QoderClaw sessions |
+| `GET /api/sessions/{id}/transcript` | Get session message transcript |
+| `POST /api/sessions/{id}/continue` | Import session for web UI continuation |
 
 ### ACP Protocol
 
@@ -247,8 +330,8 @@ Communicates with Qoder via Agent Client Protocol (ACP) over stdin/stdout:
 
 - **Lark/Feishu**: Auto-isolated by `open_id` (DM) / `chat_id` (group chat)
 - **Multi-session**: Create, switch, and manage multiple sessions via interactive cards (`/sessions`)
-- **Web**: Routed via `qoder_session` cookie to the corresponding Qoder session
-- **Cross-platform sync**: Web frontend can load sessions from CLI, enabling shared context
+- **Web**: Routed via `qoder_session` cookie or `x-session-id` header to the corresponding Qoder session
+- **Cross-platform sync**: Open WebUI can load and continue sessions from CLI/Lark via import API
 - **Persistence**: Session data stored in `~/.qoder/projects/`
 
 ### Tool Call Visualization

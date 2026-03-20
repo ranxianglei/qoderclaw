@@ -268,7 +268,7 @@ body {
   background: var(--tag-bg); color: var(--tag-color);
 }
 
-#nextchat-frame {
+#webui-frame {
   flex: 1;
   border: none;
   width: 100%;
@@ -397,7 +397,7 @@ body {
     <div class="es-title">选择一个会话开始</div>
     <div class="es-desc">左侧列出了来自所有渠道的会话，点击任意会话即可在 Qoder 中继续对话。</div>
   </div>
-  <iframe id="nextchat-frame" style="display:none" src="" allow="clipboard-write"></iframe>
+  <iframe id="webui-frame" style="display:none" src="" allow="clipboard-write"></iframe>
 </div>
 
 <!-- ─── New session modal ─── -->
@@ -441,7 +441,7 @@ body {
 
 <script>
 const BRIDGE = '';          // 同源 bridge
-const NEXTCHAT = 'http://' + location.hostname + ':3000';  // NextChat 地址
+const OPEN_WEBUI = 'http://' + location.hostname + ':3001';  // Open WebUI 地址
 
 let sessions = [];
 let currentId = null;
@@ -556,13 +556,13 @@ async function openSession(qoderSessionId) {
 
   // 切换显示
   document.getElementById('empty-state').style.display = 'none';
-  const frame = document.getElementById('nextchat-frame');
+  const frame = document.getElementById('webui-frame');
   frame.style.display = 'block';
 
-  // 加载 NextChat，创建新的本地对话
+  // 加载 Open WebUI，创建新的对话
   frame.src = 'about:blank';
   await new Promise(r => setTimeout(r, 50));
-  frame.src = NEXTCHAT + '/#/?new=1';
+  frame.src = OPEN_WEBUI;
 
   // 获取 transcript（默认只加载最后 50 条）
   if (s && s.has_transcript) {
@@ -607,7 +607,7 @@ async function loadFullHistory() {
     const hRes = await fetch(`${BRIDGE}/api/qoder-sessions/${encodeURIComponent(sessionId)}/transcript?limit=0`);
     if (hRes.ok) {
       const hData = await hRes.json();
-      const frame = document.getElementById('nextchat-frame');
+      const frame = document.getElementById('webui-frame');
       frame.contentWindow.postMessage({
         type: 'qoder-load-history',
         messages: hData.messages,
@@ -690,13 +690,13 @@ async function confirmNew() {
 
   // 切换显示
   document.getElementById('empty-state').style.display = 'none';
-  const frame = document.getElementById('nextchat-frame');
+  const frame = document.getElementById('webui-frame');
   frame.style.display = 'block';
 
-  // 加载 NextChat 创建新会话
+  // 加载 Open WebUI 创建新会话
   frame.src = 'about:blank';
   await new Promise(r => setTimeout(r, 50));
-  frame.src = NEXTCHAT + '/#/?new=1';
+  frame.src = OPEN_WEBUI;
 
   // 刷新列表
   await loadSessions();
@@ -763,7 +763,7 @@ async function confirmDelete(mode) {
       if (deleteTargetId === currentId) {
         currentId = null;
         document.getElementById('session-bar').classList.remove('visible');
-        document.getElementById('nextchat-frame').style.display = 'none';
+        document.getElementById('webui-frame').style.display = 'none';
         document.getElementById('empty-state').style.display = 'flex';
       }
       renderSessionList();

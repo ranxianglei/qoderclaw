@@ -356,3 +356,7 @@ def _error_response(status_code: int, message: str):
             }
         },
     )
+
+
+# 导出主路由实例
+app = router

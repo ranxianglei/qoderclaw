@@ -101,7 +101,11 @@ async def test_bridge_core():
         id="mock-bot",
         platform="feishu",
         name="Mock Bot",
-        credentials={},
+        credentials={
+            "app_id": "mock_app_id",
+            "app_secret": "mock_app_secret",
+            "verification_token": "mock_token",
+        },
         qoder_instance="mock-qoder",
     )
     

@@ -13,7 +13,9 @@ from typing import Dict, List, Optional
 from contextlib import asynccontextmanager
 
 import yaml
-from fastapi import FastAPI, HTTPException
+import secrets
+from fastapi import FastAPI, HTTPException, Depends, Security
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from loguru import logger
@@ -24,6 +26,43 @@ from adapters.feishu import FeishuBotAdapter, FeishuPlatformManager
 from qoder_manager import QoderConfig, get_process_manager, QoderStatus
 from bridge_core import BridgeCore, get_bridge_core
 from openai_compat import router as openai_router
+
+
+# -----------------------------------------------------------------------------
+# API Key 鉴权配置
+# -----------------------------------------------------------------------------
+
+# 从环境变量读取 API Key，如果没有则使用默认值（生产环境应该设置环境变量）
+QODERCLAW_API_KEY = os.getenv("QODERCLAW_API_KEY", "sk-qoderclaw-default-key")
+
+# HTTP Bearer Token 验证
+security = HTTPBearer()
+
+
+async def verify_api_key(
+    credentials: HTTPAuthorizationCredentials = Security(security),
+) -> bool:
+    """
+    验证 API Key 的依赖函数
+    
+    Usage:
+        @app.get("/protected", dependencies=[Depends(verify_api_key)])
+        async def protected_route():
+            ...
+    """
+    if credentials.credentials != QODERCLAW_API_KEY:
+        logger.warning(f"Invalid API key attempt: {credentials.credentials[:10]}...")
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid API key",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return True
+
+
+def get_api_key() -> str:
+    """获取当前配置的 API Key（用于日志输出）"""
+    return f"{QODERCLAW_API_KEY[:8]}...{QODERCLAW_API_KEY[-4:]}" if len(QODERCLAW_API_KEY) > 12 else "***"
 
 
 # -----------------------------------------------------------------------------
@@ -174,14 +213,17 @@ class CreateQoderRequest(BaseModel):
 async def root():
     return {
         "service": "QoderClaw",
-        "version": "2.0.0",
+        "version": "2.1.0",
         "mode": "WebSocket（无需公网 IP）",
+        "auth_enabled": True,
+        "api_key_info": f"API Key: {get_api_key()}",
         "docs": "/docs",
     }
 
 
 @app.get("/health", summary="健康检查")
 async def health_check():
+    # 健康检查不需要鉴权，方便监控
     process_manager = get_process_manager()
     bridge = get_bridge_core()
 
@@ -207,11 +249,21 @@ async def health_check():
     }
 
 
+@app.get("/api/auth/test", summary="测试 API Key")
+async def test_auth(credentials: HTTPAuthorizationCredentials = Security(security)):
+    """测试 API Key 是否有效"""
+    return {
+        "status": "ok",
+        "message": "Authentication successful",
+        "api_key_prefix": credentials.credentials[:8] + "...",
+    }
+
+
 # -----------------------------------------------------------------------------
-# 路由 - 机器人管理
+# 路由 - 机器人管理（需要鉴权）
 # -----------------------------------------------------------------------------
 
-@app.get("/api/bots", summary="列出所有机器人")
+@app.get("/api/bots", summary="列出所有机器人", dependencies=[Depends(verify_api_key)])
 async def list_bots():
     bridge = get_bridge_core()
     result = []
@@ -227,7 +279,7 @@ async def list_bots():
     return {"bots": result}
 
 
-@app.delete("/api/bots/{bot_id}", summary="删除机器人")
+@app.delete("/api/bots/{bot_id}", summary="删除机器人", dependencies=[Depends(verify_api_key)])
 async def delete_bot(bot_id: str):
     bridge = get_bridge_core()
     if bot_id not in bridge.bots:
@@ -239,10 +291,10 @@ async def delete_bot(bot_id: str):
 
 
 # -----------------------------------------------------------------------------
-# 路由 - Qoder 实例管理
+# 路由 - Qoder 实例管理（需要鉴权）
 # -----------------------------------------------------------------------------
 
-@app.get("/api/qoder", summary="列出所有 Qoder 实例")
+@app.get("/api/qoder", summary="列出所有 Qoder 实例", dependencies=[Depends(verify_api_key)])
 async def list_qoder():
     pm = get_process_manager()
     instances = []
@@ -261,7 +313,7 @@ async def list_qoder():
     return {"instances": instances}
 
 
-@app.post("/api/qoder/{name}/start", summary="启动 Qoder 实例")
+@app.post("/api/qoder/{name}/start", summary="启动 Qoder 实例", dependencies=[Depends(verify_api_key)])
 async def start_qoder(name: str):
     pm = get_process_manager()
     if not await pm.start_instance(name):
@@ -269,7 +321,7 @@ async def start_qoder(name: str):
     return {"message": f"{name} started"}
 
 
-@app.post("/api/qoder/{name}/stop", summary="停止 Qoder 实例")
+@app.post("/api/qoder/{name}/stop", summary="停止 Qoder 实例", dependencies=[Depends(verify_api_key)])
 async def stop_qoder(name: str):
     pm = get_process_manager()
     if not await pm.stop_instance(name):
@@ -277,7 +329,7 @@ async def stop_qoder(name: str):
     return {"message": f"{name} stopped"}
 
 
-@app.post("/api/qoder/{name}/restart", summary="重启 Qoder 实例")
+@app.post("/api/qoder/{name}/restart", summary="重启 Qoder 实例", dependencies=[Depends(verify_api_key)])
 async def restart_qoder(name: str):
     pm = get_process_manager()
     if not await pm.restart_instance(name):
@@ -286,10 +338,10 @@ async def restart_qoder(name: str):
 
 
 # -----------------------------------------------------------------------------
-# Qoder Sessions API（用于前端同步）
+# Qoder Sessions API（用于前端同步，需要鉴权）
 # -----------------------------------------------------------------------------
 
-@app.get("/api/qoder-sessions", summary="列出所有 Qoder 会话")
+@app.get("/api/qoder-sessions", summary="列出所有 Qoder 会话", dependencies=[Depends(verify_api_key)])
 async def list_qoder_sessions():
     """从 ~/.qoder/projects 目录读取所有会话"""
     sessions = []
@@ -349,7 +401,7 @@ async def list_qoder_sessions():
     return {"sessions": sessions}
 
 
-@app.get("/api/qoder-sessions/{session_id}/transcript", summary="获取会话消息历史")
+@app.get("/api/qoder-sessions/{session_id}/transcript", summary="获取会话消息历史", dependencies=[Depends(verify_api_key)])
 async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0, count_only: bool = False):
     """读取会话的 jsonl 文件，返回消息列表
     
@@ -512,7 +564,7 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0,
     return {"messages": messages, "total": total}
 
 
-@app.delete("/api/qoder-sessions/{session_id}", summary="删除会话")
+@app.delete("/api/qoder-sessions/{session_id}", summary="删除会话", dependencies=[Depends(verify_api_key)])
 async def delete_qoder_session(session_id: str):
     """删除会话文件"""
     qoder_projects = Path.home() / ".qoder" / "projects"

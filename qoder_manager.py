@@ -15,6 +15,8 @@ from enum import Enum
 import time
 from pathlib import Path
 from loguru import logger
+import uuid
+from datetime import datetime
 
 
 class QoderStatus(Enum):
@@ -385,6 +387,63 @@ class QoderAcpClient:
     # 发送消息
     # ------------------------------------------------------------------
 
+    def _get_project_session_path(self, conversation_key: str) -> Path:
+        """获取会话对应的 jsonl 文件路径"""
+        # 使用 conversation_key 作为项目标识符
+        project_name = conversation_key.replace("/", "_").replace("\\", "_")
+        projects_dir = Path.home() / ".qoder" / "projects"
+        session_file = projects_dir / project_name / f"{conversation_key}.jsonl"
+        session_file.parent.mkdir(parents=True, exist_ok=True)
+        return session_file
+
+    def _write_message_to_transcript(self, conversation_key: str, role: str, content: str, 
+                                   message_id: Optional[str] = None, parent_id: Optional[str] = None):
+        """将消息写入 jsonl 转录文件"""
+        try:
+            session_file = self._get_project_session_path(conversation_key)
+            
+            # 生成消息元数据
+            timestamp = datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%S.%f")[:-3] + "Z"
+            msg_uuid = str(uuid.uuid4())
+            
+            # 构造消息内容
+            message_content = []
+            if isinstance(content, str):
+                message_content = [{"type": "text", "text": content}]
+            elif isinstance(content, list):
+                message_content = content
+            else:
+                message_content = [{"type": "text", "text": str(content)}]
+            
+            # 构造完整的消息对象
+            message_obj = {
+                "uuid": msg_uuid,
+                "parentUuid": parent_id or "",
+                "isSidechain": False,
+                "userType": "external",
+                "cwd": str(Path.cwd()),
+                "sessionId": conversation_key,  # 使用 conversation_key 作为 session ID
+                "version": "0.1.32",  # 匹配 worktree 模式版本
+                "agentId": "75a2f788",  # 示例 agent ID
+                "type": role,
+                "timestamp": timestamp,
+                "message": {
+                    "role": role,
+                    "content": message_content,
+                    "id": message_id or str(uuid.uuid4())
+                },
+                "isMeta": False
+            }
+            
+            # 写入 jsonl 文件
+            with open(session_file, 'a', encoding='utf-8') as f:
+                f.write(json.dumps(message_obj, ensure_ascii=False) + '\n')
+                
+            logger.debug(f"[{self.config.name}] 消息已写入转录: {session_file} | {role}: {content[:50]}...")
+            
+        except Exception as e:
+            logger.warning(f"[{self.config.name}] 写入转录失败: {e}")
+
     async def send_prompt(
         self,
         conversation_key: str,
@@ -412,6 +471,10 @@ class QoderAcpClient:
         if command_result is not None:
             # 命令已被处理，返回结果
             return command_result
+
+        # 写入用户消息到转录文件
+        user_msg_id = str(uuid.uuid4())
+        self._write_message_to_transcript(conversation_key, "user", text, user_msg_id)
 
         req_id = self._next_id
         self._prompt_texts[req_id] = []
@@ -455,6 +518,11 @@ class QoderAcpClient:
             full_text = "".join(chunks).strip()
 
             if resp is not None and full_text:
+                # 写入助手回复到转录文件
+                assistant_msg_id = str(uuid.uuid4())
+                self._write_message_to_transcript(conversation_key, "assistant", full_text, 
+                                                assistant_msg_id, user_msg_id)
+                
                 logger.debug(
                     f"[{self.config.name}] 回复 ({conversation_key}): "
                     f"{full_text[:80]}{'...' if len(full_text) > 80 else ''}"

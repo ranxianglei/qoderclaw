@@ -297,18 +297,18 @@ async def delete_bot(bot_id: str):
 @app.get("/api/qoder", summary="列出所有 Qoder 实例", dependencies=[Depends(verify_api_key)])
 async def list_qoder():
     pm = get_process_manager()
+    all_status = pm.get_all_status()
     instances = []
     for name in pm.configs:
-        status = pm.get_status(name)
-        stats = pm.get_stats(name)
+        info = all_status.get(name, {})
         instances.append({
             "name": name,
-            "status": status.value if status else "unknown",
-            "pid": stats.pid if stats else None,
-            "cpu_percent": stats.cpu_percent if stats else 0,
-            "memory_mb": stats.memory_mb if stats else 0,
-            "uptime_seconds": stats.uptime_seconds if stats else None,
-            "restart_count": pm.restart_counts.get(name, 0),
+            "status": info.get("status", "unknown"),
+            "pid": info.get("pid"),
+            "cpu_percent": info.get("cpu_percent", 0),
+            "memory_mb": info.get("memory_mb", 0),
+            "uptime_seconds": info.get("uptime_seconds", 0),
+            "restart_count": info.get("restart_count", 0),
         })
     return {"instances": instances}
 

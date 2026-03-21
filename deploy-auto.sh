@@ -379,7 +379,7 @@ User=$USER
 Group=$USER
 WorkingDirectory=$QODERCLAW_DIR
 Environment=\"QODERCLAW_API_KEY=$API_KEY\"
-Environment=\"PATH=$QODERCLAW_DIR/venv/bin:/usr/local/bin:/usr/bin:/bin\"
+Environment=\"PATH=$QODERCLAW_DIR/venv/bin:/home/$USER/.local/bin:/usr/local/bin:/usr/bin:/bin\"
 ExecStart=$QODERCLAW_DIR/venv/bin/python main.py --host $HOST --port $BACKEND_PORT
 Restart=always
 RestartSec=5

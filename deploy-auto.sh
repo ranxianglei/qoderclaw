@@ -331,6 +331,7 @@ deploy_frontend() {
         -e OPENAI_API_KEY="$API_KEY" \
         -e DEFAULT_MODEL=default-assistant \
         -e ENABLE_OLLAMA_API=false \
+        -e ENABLE_FORWARD_USER_INFO_HEADERS=true \
         -v open-webui-data:/app/backend/data \
         --add-host=host.docker.internal:host-gateway \
         "$IMAGE_NAME"

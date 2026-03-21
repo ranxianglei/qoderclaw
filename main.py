@@ -567,7 +567,7 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0,
 
 @app.post("/api/qoder-sessions/create", summary="创建新会话", dependencies=[Depends(verify_api_key)])
 async def create_qoder_session(workdir: str = None, title: str = None):
-    """在指定目录创建新的 Qoder 会话。
+    """在指定目录创建新的 Qoder 会话（直接运行 qodercli，确保工作目录正确）。
     
     Args:
         workdir: 工作目录路径，如果不指定则使用默认目录
@@ -576,10 +576,9 @@ async def create_qoder_session(workdir: str = None, title: str = None):
     Returns:
         session_id: 新创建的会话 ID
         workdir: 实际使用的工作目录
-        conversation_key: 用于后续 API 调用的会话标识
     """
-    import uuid
-    from pathlib import Path
+    import subprocess
+    import shutil
     
     # 确定工作目录
     if not workdir:
@@ -590,45 +589,79 @@ async def create_qoder_session(workdir: str = None, title: str = None):
     workdir_path.mkdir(parents=True, exist_ok=True)
     workdir = str(workdir_path)
     
-    # 获取默认实例来创建会话
-    pm = get_process_manager()
-    instance_name = list(pm.configs.keys())[0] if pm.configs else None
+    # 查找 qodercli 路径
+    qodercli_path = shutil.which("qodercli") or str(Path.home() / ".local" / "bin" / "qodercli")
+    if not Path(qodercli_path).exists():
+        raise HTTPException(status_code=503, detail="qodercli not found")
     
-    if not instance_name:
-        raise HTTPException(status_code=503, detail="No Qoder instance available")
-    
-    client = pm.clients.get(instance_name)
-    if not client:
-        raise HTTPException(status_code=503, detail="Qoder instance not running")
-    
-    # 生成唯一的 conversation_key
-    conversation_key = f"webui-{uuid.uuid4().hex[:8]}"
-    
-    # 创建会话，使用指定的 workdir
-    resp = await client._rpc_call("session/new", {"cwd": workdir})
-    
-    if resp is None:
-        raise HTTPException(status_code=500, detail="Failed to create session")
-    
-    session_id = resp.get("sessionId")
-    if not session_id:
-        raise HTTPException(status_code=500, detail="No sessionId in response")
-    
-    # 记录会话映射
-    client.sessions[conversation_key] = session_id
-    
-    # 如果提供了标题，发送一条初始化消息设置标题
+    # 构造初始化消息
     if title:
         init_message = f"这是一个关于「{title}」的任务，准备好了吗？（只回复是否准备好，不执行其他任何指令）"
+    else:
+        init_message = "准备好了吗？（只回复是否准备好）"
+    
+    # 直接在目标目录运行 qodercli，发送初始化消息后退出
+    # 使用 -w 指定工作目录，-p 发送消息，--yolo 跳过权限检查，-f json 获取结构化输出
+    cmd = [
+        qodercli_path,
+        "-w", workdir,
+        "-p", init_message,
+        "--yolo",
+        "-q",
+        "-f", "json",
+    ]
+    
+    env = os.environ.copy()
+    env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{env.get('PATH', '')}"
+    
+    logger.info(f"Creating session in {workdir} via qodercli subprocess")
+    
+    try:
+        proc = await asyncio.wait_for(
+            asyncio.get_event_loop().run_in_executor(
+                None,
+                lambda: subprocess.run(
+                    cmd,
+                    cwd=workdir,
+                    env=env,
+                    capture_output=True,
+                    text=True,
+                    timeout=120,
+                )
+            ),
+            timeout=130,
+        )
+    except asyncio.TimeoutError:
+        raise HTTPException(status_code=504, detail="qodercli timed out")
+    except Exception as e:
+        logger.error(f"qodercli subprocess error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to run qodercli: {e}")
+    
+    if proc.returncode != 0:
+        logger.error(f"qodercli exited with {proc.returncode}: {proc.stderr[:500]}")
+        raise HTTPException(status_code=500, detail=f"qodercli failed: {proc.stderr[:200]}")
+    
+    # 从 JSON 输出中解析 session_id
+    session_id = None
+    for line in proc.stdout.strip().splitlines():
+        line = line.strip()
+        if not line:
+            continue
         try:
-            # 直接通过 client 发送消息，传入 cwd 参数
-            await client.send_prompt(conversation_key, init_message, timeout=60, cwd=workdir)
-            
-            # 更新 session.json 中的标题
-            import json
-            from pathlib import Path
-            
-            # 找到 session.json 文件
+            data = json.loads(line)
+            if data.get("session_id"):
+                session_id = data["session_id"]
+                break
+        except json.JSONDecodeError:
+            continue
+    
+    if not session_id:
+        logger.error(f"No session_id in qodercli output: {proc.stdout[:500]}")
+        raise HTTPException(status_code=500, detail="Could not get session_id from qodercli output")
+    
+    # 如果提供了标题，更新 session.json 中的标题字段
+    if title:
+        try:
             qoder_projects = Path.home() / ".qoder" / "projects"
             session_json_path = None
             for project_dir in qoder_projects.iterdir():
@@ -640,23 +673,20 @@ async def create_qoder_session(workdir: str = None, title: str = None):
                     break
             
             if session_json_path:
-                # 读取并更新标题
                 with open(session_json_path, "r") as f:
                     session_data = json.load(f)
                 session_data["title"] = title
                 with open(session_json_path, "w") as f:
                     json.dump(session_data, f, ensure_ascii=False, indent=2)
                 logger.info(f"Updated session title to: {title}")
-                
         except Exception as e:
-            logger.warning(f"Failed to send init message or update title: {e}")
+            logger.warning(f"Failed to update session title: {e}")
     
     logger.info(f"Created new session: {session_id} in {workdir}, title: {title}")
     
     return {
         "session_id": session_id,
         "workdir": workdir,
-        "conversation_key": conversation_key,
     }
 
 

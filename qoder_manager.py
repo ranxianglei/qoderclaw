@@ -486,15 +486,6 @@ class QoderAcpClient:
         user_msg_id = str(uuid.uuid4())
         self._write_message_to_transcript(conversation_key, "user", text, user_msg_id)
 
-        # 如果指定了 cwd 且不是默认目录，则前置 cd 命令
-        if cwd and cwd != self.config.workdir:
-            # 先发送 cd 命令切换目录
-            cd_command = f"cd {cwd}"
-            await self._rpc_call("session/prompt", {
-                "sessionId": session_id,
-                "prompt": [{"type": "text", "text": cd_command}],
-            })
-
         req_id = self._next_id
         self._prompt_texts[req_id] = []
         if on_chunk:

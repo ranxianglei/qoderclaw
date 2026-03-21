@@ -62,7 +62,7 @@ async def create_qoder_session(workdir: str = "", title: str = ""):
     if title:
         params["title"] = title
     
-    async with httpx.AsyncClient(timeout=30) as client:
+    async with httpx.AsyncClient(timeout=150) as client:
         resp = await client.post(
             f"{QODERCLAW_BASE_URL}/api/qoder-sessions/create",
             params=params,

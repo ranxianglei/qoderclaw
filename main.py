@@ -623,8 +623,33 @@ async def create_qoder_session(workdir: str = None, title: str = None):
         try:
             # 直接通过 client 发送消息
             await client.send_prompt(conversation_key, init_message, timeout=60)
+            
+            # 更新 session.json 中的标题
+            import json
+            from pathlib import Path
+            
+            # 找到 session.json 文件
+            qoder_projects = Path.home() / ".qoder" / "projects"
+            session_json_path = None
+            for project_dir in qoder_projects.iterdir():
+                if not project_dir.is_dir():
+                    continue
+                candidate = project_dir / f"{session_id}-session.json"
+                if candidate.exists():
+                    session_json_path = candidate
+                    break
+            
+            if session_json_path:
+                # 读取并更新标题
+                with open(session_json_path, "r") as f:
+                    session_data = json.load(f)
+                session_data["title"] = title
+                with open(session_json_path, "w") as f:
+                    json.dump(session_data, f, ensure_ascii=False, indent=2)
+                logger.info(f"Updated session title to: {title}")
+                
         except Exception as e:
-            logger.warning(f"Failed to send init message: {e}")
+            logger.warning(f"Failed to send init message or update title: {e}")
     
     logger.info(f"Created new session: {session_id} in {workdir}, title: {title}")
     

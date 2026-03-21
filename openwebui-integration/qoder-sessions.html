@@ -171,6 +171,11 @@
 <div class="modal-overlay" id="newSessionModal" style="display:none;" onclick="closeModalOnOverlay(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <h3>Create New Session</h3>
+    <div class="warning" style="background:#fff8e1;border-left:4px solid #ffc107;padding:12px;margin-bottom:16px;font-size:13px;color:#5a5a5a;">
+      ⚠️ <strong>Note:</strong> Sessions will run in the default working directory defined in QoderClaw config (<code>/home/dog</code>). 
+      The directory you specify here is only for metadata display. To use a different working directory, 
+      please configure additional Qoder instances in the backend config.
+    </div>
     <div style="margin-bottom:16px;">
       <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;">Title</label>
       <input type="text" id="titleInput" placeholder="My Project Task" style="width:100%;" />

@@ -135,7 +135,7 @@ QoderClaw integrates with [Open WebUI](https://github.com/ranxianglei/open-webui
 
 ```bash
 # Clone the QoderClaw-integrated fork
-git clone -b qoderclaw-integration https://github.com/ranxianglei/open-webui.git
+git clone -b main https://github.com/ranxianglei/open-webui.git
 cd open-webui
 
 # Run with Docker (recommended)

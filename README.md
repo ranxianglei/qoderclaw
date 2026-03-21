@@ -135,12 +135,11 @@ QoderClaw integrates with [Open WebUI](https://github.com/ranxianglei/open-webui
 
 ```bash
 # Clone the QoderClaw-integrated fork
-git clone https://github.com/ranxianglei/open-webui.git
+git clone -b qoderclaw-integration https://github.com/ranxianglei/open-webui.git
 cd open-webui
 
-# Checkout the integration branch
-
-# Build and run with Docker (recommended)
+# Run with Docker (recommended)
+# Note: --add-host allows container to access QoderClaw on host
 docker run -d \
   --name open-webui \
   --restart always \
@@ -151,8 +150,16 @@ docker run -d \
   -e OPENAI_API_KEY=sk-qoderclaw \
   -e DEFAULT_MODEL=default-assistant \
   -e ENABLE_OLLAMA_API=false \
-  -v open-webui:/app/backend/data \
+  -v open-webui-data:/app/backend/data \
+  --add-host=host.docker.internal:host-gateway \
   ghcr.io/open-webui/open-webui:main
+```
+
+**Important:** For Docker deployment, QoderClaw must listen on `0.0.0.0` (not `127.0.0.1`):
+
+```bash
+# Start QoderClaw with API key (required for Open WebUI integration)
+QODERCLAW_API_KEY=sk-qoderclaw ./venv/bin/python main.py --host 0.0.0.0 --port 8080
 ```
 
 Or run from source:
@@ -162,7 +169,7 @@ Or run from source:
 cd backend
 pip install -r requirements.txt
 
-# Frontend setup
+# Frontend setup (requires Node.js 18+)
 cd ..
 npm install
 npm run build

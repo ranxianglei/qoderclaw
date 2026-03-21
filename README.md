@@ -69,6 +69,45 @@ If you prefer to install manually, follow the steps below.
 +---------------------------------------------------------+
 ```
 
+## Project Structure
+
+```
+qoderclaw/
+├── main.py                          # QoderClaw Backend (FastAPI)
+├── openai_compat.py                 # OpenAI-compatible API
+├── qoder_manager.py                 # qodercli process management
+├── deploy-auto.sh                   # Automated deployment script
+├── Dockerfile.openwebui             # Build custom Open WebUI image
+├── openwebui-integration/           # Open WebUI extension
+│   ├── qoder_sessions.py            # API routes for /api/v1/qoder/*
+│   ├── qoder-sessions.html          # Session list page
+│   └── qoder-session.html           # Session detail page
+└── ...
+```
+
+**Two services are required:**
+
+| Service | Port | Description |
+|---------|------|-------------|
+| **QoderClaw Backend** | 8080 | Core AI service, manages qodercli processes |
+| **Open WebUI Frontend** | 3001 | Web interface (official image + our extension) |
+
+**Building the WebUI image:**
+```bash
+# Build custom Open WebUI with QoderClaw integration
+docker build -f Dockerfile.openwebui -t qoderclaw-webui:latest .
+
+# Run the container
+docker run -d \
+    --name open-webui \
+    -p 3001:8080 \
+    -e OPENAI_API_BASE_URL="http://host.docker.internal:8080/v1" \
+    -e ENABLE_FORWARD_USER_INFO_HEADERS=true \
+    qoderclaw-webui:latest
+```
+
+The `openwebui-integration/` directory contains extensions that are **copied into** the official Open WebUI image via `Dockerfile.openwebui`. It cannot run standalone.
+
 ## Quick Start
 
 ### 1. Automated Deployment (Recommended)

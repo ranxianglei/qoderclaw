@@ -621,8 +621,8 @@ async def create_qoder_session(workdir: str = None, title: str = None):
     if title:
         init_message = f"这是一个关于「{title}」的任务，准备好了吗？（只回复是否准备好，不执行其他任何指令）"
         try:
-            # 直接通过 client 发送消息
-            await client.send_prompt(conversation_key, init_message, timeout=60)
+            # 直接通过 client 发送消息，传入 cwd 参数
+            await client.send_prompt(conversation_key, init_message, timeout=60, cwd=workdir)
             
             # 更新 session.json 中的标题
             import json

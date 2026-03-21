@@ -214,13 +214,21 @@ class QoderAcpClient:
     # 会话管理
     # ------------------------------------------------------------------
 
-    async def get_or_create_session(self, conversation_key: str) -> Optional[str]:
-        """获取或创建 ACP 会话，返回 session_id"""
+    async def get_or_create_session(self, conversation_key: str, cwd: str = None) -> Optional[str]:
+        """获取或创建 ACP 会话，返回 session_id
+        
+        Args:
+            conversation_key: 会话标识符
+            cwd: 工作目录，如果提供则覆盖配置中的默认目录
+        """
         if conversation_key in self.sessions:
             return self.sessions[conversation_key]
 
+        # 使用传入的 cwd，否则使用配置的默认值
+        workdir = cwd or self.config.workdir
+        
         resp = await self._rpc_call("session/new", {
-            "cwd": self.config.workdir,
+            "cwd": workdir,
         })
 
         if resp is None:
@@ -451,6 +459,7 @@ class QoderAcpClient:
         timeout: float = 300,
         on_chunk: Optional[Callable[[str], None]] = None,
         media_parts: Optional[List[dict]] = None,
+        cwd: str = None,  # 新增参数
     ) -> Optional[str]:
         """
         向指定会话发送消息并等待完整回复。
@@ -459,10 +468,11 @@ class QoderAcpClient:
             text: 文本内容
             on_chunk: 可选回调，每收到一个文本块立即调用（用于流式输出）
             media_parts: 可选的多模态内容块列表，格式如 [{"type": "image", "data": bytes, "mime": "image/png"}, ...]
+            cwd: 工作目录，如果提供则在创建会话时使用
 
         返回 AI 的完整文本回复，超时或失败返回 None。
         """
-        session_id = await self.get_or_create_session(conversation_key)
+        session_id = await self.get_or_create_session(conversation_key, cwd)
         if not session_id:
             return None
 

@@ -305,9 +305,11 @@ EOF
 deploy_frontend() {
     log "开始部署 Open WebUI 前端..."
     
-    # 拉取并运行 Docker 容器
-    log "拉取 Open WebUI 镜像..."
-    docker pull ghcr.io/open-webui/open-webui:main
+    local IMAGE_NAME="qoderclaw-webui:latest"
+    
+    # 构建自定义镜像（包含 QoderClaw 集成）
+    log "构建 QoderClaw Open WebUI 镜像..."
+    docker build -f "$QODERCLAW_DIR/Dockerfile.openwebui" -t "$IMAGE_NAME" "$QODERCLAW_DIR"
     
     # 停止已有容器
     if docker ps -a --format '{{.Names}}' | grep -q "^open-webui$"; then
@@ -330,7 +332,7 @@ deploy_frontend() {
         -e ENABLE_OLLAMA_API=false \
         -v open-webui-data:/app/backend/data \
         --add-host=host.docker.internal:host-gateway \
-        ghcr.io/open-webui/open-webui:main
+        "$IMAGE_NAME"
     
     # 等待启动
     log "等待前端启动..."

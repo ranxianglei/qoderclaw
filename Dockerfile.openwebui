@@ -1,0 +1,17 @@
+# =============================================================================
+# QoderClaw Open WebUI - 基于官方镜像，集成 QoderClaw 会话管理
+# =============================================================================
+FROM ghcr.io/open-webui/open-webui:main
+
+# 复制 QoderClaw 集成文件 - 路由器
+COPY openwebui-integration/qoder_sessions.py /app/backend/open_webui/routers/qoder_sessions.py
+
+# 复制静态页面到前端 build 目录（启动时 config.py 会从此处同步到 STATIC_DIR）
+COPY openwebui-integration/qoder-sessions.html /app/build/static/qoder-sessions.html
+COPY openwebui-integration/qoder-session.html /app/build/static/qoder-session.html
+
+# 修改 main.py: 添加 qoder_sessions 路由器导入和注册
+RUN sed -i 's/from open_webui.routers import (/from open_webui.routers import (\n    qoder_sessions,/' \
+        /app/backend/open_webui/main.py && \
+    sed -i '/app.include_router(ollama.router.*)/a app.include_router(qoder_sessions.router, prefix="/api/v1/qoder", tags=["qoder"])' \
+        /app/backend/open_webui/main.py

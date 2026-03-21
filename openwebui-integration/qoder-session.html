@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Session Messages</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/marked-highlight/styles/github.min.css">
+<style>
+  :root {
+    --bg-primary: #ffffff;
+    --bg-secondary: #f7f7f8;
+    --bg-hover: #f0f0f0;
+    --bg-user: #f0f9ff;
+    --text-primary: #171717;
+    --text-secondary: #565869;
+    --text-muted: #8e8ea0;
+    --border: #e5e5e5;
+    --accent: #4b7fff;
+    --accent-hover: #3a66e6;
+    --radius: 12px;
+    --code-bg: #f6f8fa;
+  }
+  * { margin:0; padding:0; box-sizing:border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh; display: flex; flex-direction: column;
+  }
+  .header {
+    position: sticky; top: 0; z-index: 100;
+    background: var(--bg-primary); border-bottom: 1px solid var(--border);
+    padding: 12px 20px; display: flex; align-items: center; gap: 16px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+  }
+  .header .back-btn {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-size: 14px; display: flex; align-items: center; gap: 4px;
+    padding: 6px 12px; border-radius: 8px; text-decoration: none;
+  }
+  .header .back-btn:hover { background: var(--bg-hover); }
+  .header .title { font-size: 16px; font-weight: 600; flex: 1; min-width: 0;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .header .meta { font-size: 12px; color: var(--text-muted); white-space: nowrap; }
+  .header .continue-btn {
+    background: var(--accent); color: white; border: none;
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 12px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    transition: background 0.15s;
+  }
+  .header .continue-btn:hover { background: var(--accent-hover); }
+  .header .continue-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .messages-wrap {
+    flex: 1; overflow-y: auto; padding-bottom: 24px;
+  }
+  .messages { max-width: 768px; margin: 0 auto; width: 100%; }
+  .message-row { padding: 20px 24px; }
+  .message-row:hover { background: rgba(0,0,0,0.02); }
+  .message-row + .message-row { border-top: 1px solid rgba(0,0,0,0.04); }
+  .msg-role { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .msg-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 14px; flex-shrink: 0;
+  }
+  .msg-avatar.user { background: #3b82f6; color: white; }
+  .msg-avatar.assistant { background: #10b981; color: white; }
+  .msg-avatar.system { background: #6366f1; color: white; }
+  .msg-role-name { font-size: 13px; font-weight: 600; }
+  .msg-content {
+    padding-left: 36px;
+    font-size: 15px; line-height: 1.7;
+    color: var(--text-primary);
+    overflow-wrap: break-word;
+  }
+  .msg-content p { margin: 0 0 12px 0; }
+  .msg-content p:last-child { margin-bottom: 0; }
+  .msg-content h1,.msg-content h2,.msg-content h3,.msg-content h4 { margin: 16px 0 8px 0; font-weight: 600; }
+  .msg-content h1 { font-size: 22px; }
+  .msg-content h2 { font-size: 18px; }
+  .msg-content h3 { font-size: 16px; }
+  .msg-content ul, .msg-content ol { padding-left: 24px; margin: 8px 0; }
+  .msg-content li { margin: 4px 0; }
+  .msg-content code {
+    background: var(--code-bg); padding: 2px 6px;
+    border-radius: 4px; font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px;
+  }
+  .msg-content pre {
+    background: var(--code-bg); border-radius: 8px;
+    padding: 16px; margin: 12px 0; overflow-x: auto;
+    border: 1px solid var(--border);
+  }
+  .msg-content pre code { background: none; padding: 0; font-size: 13px; line-height: 1.5; }
+  .msg-content blockquote {
+    border-left: 3px solid var(--accent); padding: 8px 16px;
+    margin: 12px 0; color: var(--text-secondary);
+    background: rgba(75,127,255,0.05); border-radius: 0 8px 8px 0;
+  }
+  .msg-content a { color: var(--accent); text-decoration: none; }
+  .msg-content a:hover { text-decoration: underline; }
+  .msg-content table { border-collapse: collapse; width: 100%; margin: 12px 0; }
+  .msg-content th, .msg-content td { border: 1px solid var(--border); padding: 8px 12px; text-align: left; font-size: 14px; }
+  .msg-content th { background: var(--bg-secondary); font-weight: 600; }
+  .msg-content img { max-width: 100%; border-radius: 8px; margin: 8px 0; }
+  .msg-content hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+  .loading {
+    display: flex; align-items: center; justify-content: center;
+    padding: 60px; color: var(--text-muted);
+  }
+  .spinner {
+    width: 24px; height: 24px; border: 3px solid var(--border);
+    border-top-color: var(--accent); border-radius: 50%;
+    animation: spin 0.8s linear infinite; margin-right: 12px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; padding: 60px; color: var(--text-muted); }
+  .readonly-banner {
+    background: rgba(75,127,255,0.1); border-bottom: 1px solid rgba(75,127,255,0.2);
+    padding: 8px 20px; text-align: center; font-size: 12px; color: var(--accent);
+  }
+  .bottom-bar {
+    position: sticky; bottom: 0; z-index: 100;
+    background: var(--bg-primary); border-top: 1px solid var(--border);
+    padding: 12px 20px; text-align: center;
+    box-shadow: 0 -1px 2px rgba(0,0,0,0.05);
+  }
+  .bottom-bar .continue-btn {
+    background: var(--accent); color: white; border: none;
+    padding: 10px 24px; border-radius: 8px;
+    font-size: 14px; font-weight: 500; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background 0.15s;
+  }
+  .bottom-bar .continue-btn:hover { background: var(--accent-hover); }
+  .bottom-bar .continue-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+</style>
+</head>
+<body>
+<div class="header">
+  <a href="/static/qoder-sessions.html" class="back-btn">&larr; Sessions</a>
+  <div class="title" id="title">Loading...</div>
+  <div class="meta" id="meta"></div>
+  <button class="continue-btn" id="topContinueBtn" style="display:none;" onclick="continueSession()">
+    &nearr; Continue This Session
+  </button>
+</div>
+<div class="readonly-banner">Read-only view &mdash; messages loaded directly from Qoder session</div>
+<div class="messages-wrap">
+  <div class="messages" id="messages">
+    <div class="loading"><div class="spinner"></div>Loading messages...</div>
+  </div>
+</div>
+<div class="bottom-bar">
+  <button class="continue-btn" id="bottomContinueBtn" style="display:none;" onclick="continueSession()">
+    &nearr; Continue This Session
+  </button>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+<script>
+const sessionId = new URLSearchParams(window.location.search).get('id');
+
+if (!sessionId) {
+  document.getElementById('messages').innerHTML = '<div class="empty">No session ID provided</div>';
+}
+
+async function loadSession() {
+  if (!sessionId) return;
+
+  try {
+    const sessResp = await fetch('/api/v1/qoder/sessions');
+    const sessData = await sessResp.json();
+    const session = (sessData.sessions || []).find(s => s.id === sessionId);
+    if (session) {
+      document.getElementById('title').textContent = session.title || 'Untitled Session';
+      document.getElementById('meta').textContent =
+        `${session.message_count} msgs \u00b7 ${new Date(session.updated_at).toLocaleString()}`;
+      document.title = `${session.title || 'Session'} - Qoder`;
+      document.getElementById('topContinueBtn').style.display = 'flex';
+      document.getElementById('bottomContinueBtn').style.display = 'inline-flex';
+    }
+  } catch (e) {
+    console.error('Failed to load session info:', e);
+  }
+
+  try {
+    const resp = await fetch(`/api/v1/qoder/sessions/${sessionId}/transcript`);
+    const data = await resp.json();
+    const messages = data.messages || [];
+    const el = document.getElementById('messages');
+    if (!messages.length) {
+      el.innerHTML = '<div class="empty">No messages in this session</div>';
+      return;
+    }
+    marked.setOptions({ breaks: true, gfm: true });
+    el.innerHTML = messages.map(m => {
+      const role = m.role || 'assistant';
+      const avatarClass = role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant';
+      const avatarText = role === 'user' ? 'U' : role === 'system' ? 'S' : 'A';
+      const roleName = role === 'user' ? 'You' : role === 'system' ? 'System' : 'Assistant';
+      let content = '';
+      try { content = marked.parse(m.content || ''); } catch (e) { content = escapeHtml(m.content || ''); }
+      return `
+        <div class="message-row">
+          <div class="msg-role">
+            <div class="msg-avatar ${avatarClass}">${avatarText}</div>
+            <div class="msg-role-name">${roleName}</div>
+          </div>
+          <div class="msg-content">${content}</div>
+        </div>`;
+    }).join('');
+  } catch (err) {
+    document.getElementById('messages').innerHTML =
+      `<div class="empty">Failed to load messages: ${err.message}</div>`;
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+async function continueSession() {
+  if (!sessionId) return;
+
+  // Disable buttons to prevent double-click
+  const btns = document.querySelectorAll('.continue-btn');
+  btns.forEach(b => { b.disabled = true; b.textContent = 'Importing...'; });
+
+  try {
+    // Step 1: Import QoderClaw session into Open WebUI database
+    const resp = await fetch(`/api/v1/qoder/import-session/${sessionId}`, { method: 'POST' });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Import failed' }));
+      throw new Error(err.detail || 'Import failed');
+    }
+    const result = await resp.json();
+
+    // Step 2: Navigate to the Open WebUI chat using the same session ID
+    window.open(`/c/${result.chat_id}`, '_blank');
+  } catch (e) {
+    alert('Failed to import session: ' + e.message);
+    console.error('Import error:', e);
+  } finally {
+    btns.forEach(b => { b.disabled = false; });
+    document.getElementById('topContinueBtn').innerHTML = '&nearr; Continue This Session';
+    document.getElementById('bottomContinueBtn').innerHTML = '&nearr; Continue This Session';
+  }
+}
+
+loadSession();
+</script>
+</body>
+</html>

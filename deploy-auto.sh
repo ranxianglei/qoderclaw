@@ -160,6 +160,7 @@ load_or_create_config() {
             [[ -z "${HOST:-}" ]] && HOST=$(jq -r '.host // empty' "$CONFIG_FILE")
             [[ -z "${WORKDIR:-}" ]] && WORKDIR=$(jq -r '.workdir // empty' "$CONFIG_FILE")
             [[ -z "${QODERCLAW_DIR:-}" ]] && QODERCLAW_DIR=$(jq -r '.qoderclaw_dir // empty' "$CONFIG_FILE")
+            [[ -z "${API_KEY:-}" ]] && API_KEY=$(jq -r '.api_key // empty' "$CONFIG_FILE")
             [[ -z "${USE_SYSTEMD:-}" ]] && USE_SYSTEMD=$(jq -r '.use_systemd // false' "$CONFIG_FILE")
         else
             log_warn "配置文件格式错误，将重新创建"
@@ -452,7 +453,7 @@ start_backend() {
         # 等待启动
         log "等待后端启动..."
         for i in {1..30}; do
-            if curl -sf "http://$HOST:$BACKEND_PORT/health" &>/dev/null; then
+            if curl -sf "http://127.0.0.1:$BACKEND_PORT/health" &>/dev/null; then
                 log_success "后端启动成功"
                 return 0
             fi
@@ -492,7 +493,7 @@ validate_deployment() {
     log "验证部署..."
     
     # 检查后端健康
-    if curl -sf "http://$HOST:$BACKEND_PORT/health" &>/dev/null; then
+    if curl -sf "http://127.0.0.1:$BACKEND_PORT/health" &>/dev/null; then
         log_success "✓ 后端健康检查通过"
     else
         log_error "✗ 后端健康检查失败"
@@ -509,7 +510,7 @@ validate_deployment() {
     
     # 测试 API（可选）
     log "测试 OpenAI 兼容 API..."
-    RESPONSE=$(curl -sf -X POST "http://$HOST:$BACKEND_PORT/v1/chat/completions" \
+    RESPONSE=$(curl -sf -X POST "http://127.0.0.1:$BACKEND_PORT/v1/chat/completions" \
         -H "Content-Type: application/json" \
         -H "Authorization: Bearer $API_KEY" \
         -d '{"model":"default-assistant","messages":[{"role":"user","content":"ping"}]}' || echo "ERROR")

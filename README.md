@@ -472,6 +472,69 @@ qoderclaw/
 └── .gitignore             # Git ignore rules
 ```
 
+## Troubleshooting
+
+### Deployment Issues
+
+#### 1. qoder-sessions.html returns "Failed to load sessions"
+
+**Problem**: The qoder-sessions page shows "Authentication required" or fails to load.
+
+**Cause**: Open WebUI requires user authentication. The qoder-sessions page is a static file that needs a valid session.
+
+**Solution**:
+1. First login to Open WebUI at `http://localhost:3001`
+2. Create an account or login
+3. Then access `http://localhost:3001/static/qoder-sessions.html`
+
+#### 2. Docker mount permission issues
+
+**Problem**: When mounting directories, files get deleted or permissions are wrong.
+
+**Cause**: Docker containers run as root by default, which can modify host files.
+
+**Solution**: Use the custom Docker image (`Dockerfile.openwebui`) instead of mounting directories. The image:
+- Copies integration files at build time
+- Avoids bind mount permission issues
+- Static files are placed in `/app/build/static/` (not `/app/backend/open_webui/static/`)
+
+#### 3. Static files 404 after container restart
+
+**Problem**: qoder-sessions.html was working but returns 404 after restart.
+
+**Cause**: Open WebUI's `config.py` deletes and recreates static files from `FRONTEND_BUILD_DIR` on startup.
+
+**Solution**: Files must be copied to `/app/build/static/` (FRONTEND_BUILD_DIR), not directly to the static directory.
+
+#### 4. qoder_sessions router not registered
+
+**Problem**: API endpoints return 404.
+
+**Cause**: The FastAPI router wasn't properly imported and registered in `main.py`.
+
+**Solution**: The custom Dockerfile uses `sed` to inject the import and registration during build:
+```dockerfile
+RUN sed -i 's/from open_webui.routers import (/from open_webui.routers import (\n    qoder_sessions,/' ...
+```
+
+### Build Issues
+
+#### Docker build fails with "sed: no such file"
+
+**Problem**: The sed command fails during Docker build.
+
+**Cause**: The base image file structure may have changed.
+
+**Solution**: Check the official Open WebUI image structure and adjust the sed patterns in `Dockerfile.openwebui`.
+
+### API Issues
+
+#### Backend API returns 401 Unauthorized
+
+**Problem**: API calls fail with authentication errors.
+
+**Solution**: Ensure `OPENAI_API_KEY` environment variable is set correctly in the Docker container. The key should match the one configured in QoderClaw backend.
+
 ## API Docs
 
 After starting the server, visit: http://localhost:8080/docs

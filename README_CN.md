@@ -487,6 +487,69 @@ qoderclaw/
 └── .gitignore             # Git 忽略规则
 ```
 
+## 故障排除
+
+### 部署问题
+
+#### 1. qoder-sessions.html 显示 "Failed to load sessions"
+
+**问题**：qoder-sessions 页面显示需要认证或加载失败。
+
+**原因**：Open WebUI 需要用户认证。qoder-sessions 是静态文件，需要有效会话。
+
+**解决方案**：
+1. 先登录 Open WebUI：`http://localhost:3001`
+2. 创建账户或登录
+3. 然后访问：`http://localhost:3001/static/qoder-sessions.html`
+
+#### 2. Docker 挂载权限问题
+
+**问题**：挂载目录时文件被删除或权限错误。
+
+**原因**：Docker 容器默认以 root 运行，可能修改主机文件。
+
+**解决方案**：使用自定义 Docker 镜像（`Dockerfile.openwebui`）代替目录挂载。该镜像：
+- 在构建时复制集成文件
+- 避免绑定挂载权限问题
+- 静态文件放在 `/app/build/static/`（而非 `/app/backend/open_webui/static/`）
+
+#### 3. 容器重启后静态文件 404
+
+**问题**：qoder-sessions.html 之前正常，重启后返回 404。
+
+**原因**：Open WebUI 的 `config.py` 启动时会从 `FRONTEND_BUILD_DIR` 删除并重新创建静态文件。
+
+**解决方案**：文件必须复制到 `/app/build/static/`（FRONTEND_BUILD_DIR），而不是直接放到 static 目录。
+
+#### 4. qoder_sessions 路由未注册
+
+**问题**：API 端点返回 404。
+
+**原因**：FastAPI 路由器未正确导入和注册到 `main.py`。
+
+**解决方案**：自定义 Dockerfile 在构建时使用 `sed` 注入导入和注册：
+```dockerfile
+RUN sed -i 's/from open_webui.routers import (/from open_webui.routers import (\n    qoder_sessions,/' ...
+```
+
+### 构建问题
+
+#### Docker 构建失败，提示 "sed: no such file"
+
+**问题**：Docker 构建时 sed 命令失败。
+
+**原因**：官方 Open WebUI 镜像的文件结构可能已更改。
+
+**解决方案**：检查官方 Open WebUI 镜像结构，调整 `Dockerfile.openwebui` 中的 sed 模式。
+
+### API 问题
+
+#### 后端 API 返回 401 Unauthorized
+
+**问题**：API 调用返回认证错误。
+
+**解决方案**：确保 Docker 容器中正确设置了 `OPENAI_API_KEY` 环境变量。该密钥应与 QoderClaw 后端配置的密钥匹配。
+
 ## API 文档
 
 服务启动后访问：http://localhost:8080/docs

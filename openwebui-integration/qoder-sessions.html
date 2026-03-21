@@ -171,8 +171,15 @@
 <div class="modal-overlay" id="newSessionModal" style="display:none;" onclick="closeModalOnOverlay(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <h3>Create New Session</h3>
-    <input type="text" id="workdirInput" placeholder="/home/user/projects/my-project" />
-    <div class="modal-hint">Working directory path (leave empty for home directory)</div>
+    <div style="margin-bottom:16px;">
+      <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;">Title</label>
+      <input type="text" id="titleInput" placeholder="My Project Task" style="width:100%;" />
+    </div>
+    <div>
+      <label style="font-size:12px;color:var(--text-secondary);display:block;margin-bottom:6px;">Working Directory</label>
+      <input type="text" id="workdirInput" placeholder="/home/user/projects/my-project" style="width:100%;" />
+      <div class="modal-hint">Leave empty for home directory</div>
+    </div>
     <div class="modal-actions">
       <button class="cancel" onclick="closeNewSessionModal()">Cancel</button>
       <button class="create" id="createBtn" onclick="createNewSession()">Create</button>
@@ -305,8 +312,9 @@ loadSessions();
 // New Session Modal
 function showNewSessionModal() {
   document.getElementById('newSessionModal').style.display = 'flex';
+  document.getElementById('titleInput').value = '';
   document.getElementById('workdirInput').value = '';
-  document.getElementById('workdirInput').focus();
+  document.getElementById('titleInput').focus();
 }
 
 function closeNewSessionModal() {
@@ -321,13 +329,20 @@ function closeModalOnOverlay(e) {
 
 async function createNewSession() {
   const btn = document.getElementById('createBtn');
+  const title = document.getElementById('titleInput').value.trim();
   const workdir = document.getElementById('workdirInput').value.trim();
+  
+  if (!title) {
+    alert('Please enter a title');
+    return;
+  }
   
   btn.disabled = true;
   btn.textContent = 'Creating...';
   
   try {
     const params = new URLSearchParams();
+    params.append('title', title);
     if (workdir) params.append('workdir', workdir);
     
     const resp = await fetch(`/api/v1/qoder/sessions/create?${params.toString()}`, {
@@ -342,6 +357,9 @@ async function createNewSession() {
     const result = await resp.json();
     closeNewSessionModal();
     
+    // Wait a moment for the session to be saved, then redirect
+    await new Promise(r => setTimeout(r, 500));
+    
     // Jump to the new session page
     window.location.href = `/static/qoder-session.html?id=${result.session_id}`;
     
@@ -355,9 +373,15 @@ async function createNewSession() {
 }
 
 // Handle Enter key in input
-document.getElementById('workdirInput').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') createNewSession();
-  if (e.key === 'Escape') closeNewSessionModal();
+document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('titleInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') document.getElementById('workdirInput').focus();
+    if (e.key === 'Escape') closeNewSessionModal();
+  });
+  document.getElementById('workdirInput').addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') createNewSession();
+    if (e.key === 'Escape') closeNewSessionModal();
+  });
 });
 </script>
 </body>

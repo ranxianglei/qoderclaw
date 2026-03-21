@@ -566,15 +566,17 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0,
 
 
 @app.post("/api/qoder-sessions/create", summary="创建新会话", dependencies=[Depends(verify_api_key)])
-async def create_qoder_session(workdir: str = None):
+async def create_qoder_session(workdir: str = None, title: str = None):
     """在指定目录创建新的 Qoder 会话。
     
     Args:
         workdir: 工作目录路径，如果不指定则使用默认目录
+        title: 会话标题（可选）
         
     Returns:
         session_id: 新创建的会话 ID
         workdir: 实际使用的工作目录
+        conversation_key: 用于后续 API 调用的会话标识
     """
     import uuid
     from pathlib import Path
@@ -615,7 +617,16 @@ async def create_qoder_session(workdir: str = None):
     # 记录会话映射
     client.sessions[conversation_key] = session_id
     
-    logger.info(f"Created new session: {session_id} in {workdir}")
+    # 如果提供了标题，发送一条初始化消息设置标题
+    if title:
+        init_message = f"这是一个关于「{title}」的任务，准备好了吗？（只回复是否准备好，不执行其他任何指令）"
+        try:
+            # 直接通过 client 发送消息
+            await client.send_prompt(conversation_key, init_message, timeout=60)
+        except Exception as e:
+            logger.warning(f"Failed to send init message: {e}")
+    
+    logger.info(f"Created new session: {session_id} in {workdir}, title: {title}")
     
     return {
         "session_id": session_id,

@@ -54,13 +54,15 @@ async def get_qoder_sessions():
 
 
 @router.post("/sessions/create", dependencies=[Depends(optional_auth)])
-async def create_qoder_session(workdir: str = ""):
-    """Create a new QoderClaw session in the specified directory."""
+async def create_qoder_session(workdir: str = "", title: str = ""):
+    """Create a new QoderClaw session in the specified directory with optional title."""
     params = {}
     if workdir:
         params["workdir"] = workdir
+    if title:
+        params["title"] = title
     
-    async with httpx.AsyncClient(timeout=10) as client:
+    async with httpx.AsyncClient(timeout=30) as client:
         resp = await client.post(
             f"{QODERCLAW_BASE_URL}/api/qoder-sessions/create",
             params=params,

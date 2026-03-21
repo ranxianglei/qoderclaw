@@ -95,6 +95,17 @@
   }
   .continue-btn:hover { background: var(--accent-hover); }
   .continue-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .copy-btn {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 6px;
+    font-size: 11px; cursor: pointer;
+    display: flex; align-items: center; gap: 3px;
+    transition: all 0.15s; white-space: nowrap; flex-shrink: 0;
+  }
+  .copy-btn:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
+  .btn-group { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
   .loading {
     display: flex; align-items: center; justify-content: center;
     padding: 60px; color: var(--text-muted);
@@ -171,9 +182,17 @@ async function loadSessions() {
             </div>
             ${s.working_dir ? `<div class="session-dir">${escapeHtml(s.working_dir)}</div>` : ''}
           </div>
-          <button class="continue-btn" data-sid="${s.id}" onclick="continueSession('${s.id}', this); event.preventDefault(); event.stopPropagation();">
-            &nearr; Continue
-          </button>
+          <div class="btn-group">
+            <button class="copy-btn" title="Copy Session ID" onclick="copyText('${s.id}', this, 'ID'); event.preventDefault(); event.stopPropagation();">
+              &#128203; ID
+            </button>
+            <button class="copy-btn" title="Copy resume command" onclick="copyText('cd ${escapeHtml(s.working_dir || '~')} &amp;&amp; qodercli --yolo -r ${s.id}', this, 'CMD'); event.preventDefault(); event.stopPropagation();">
+              &#128196; CMD
+            </button>
+            <button class="continue-btn" data-sid="${s.id}" onclick="continueSession('${s.id}', this); event.preventDefault(); event.stopPropagation();">
+              &nearr; Continue
+            </button>
+          </div>
           <div class="session-arrow">&rsaquo;</div>
         </a>
       `;
@@ -189,6 +208,24 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+async function copyText(text, btn, label) {
+  const decoded = text.replace(/&amp;/g, '&');
+  try {
+    await navigator.clipboard.writeText(decoded);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = decoded;
+    ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  const orig = btn.innerHTML;
+  btn.innerHTML = '&#10003; Copied';
+  btn.classList.add('copied');
+  setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1500);
 }
 
 async function continueSession(sessionId, btnEl) {

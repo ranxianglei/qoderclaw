@@ -134,6 +134,16 @@
   }
   .bottom-bar .continue-btn:hover { background: var(--accent-hover); }
   .bottom-bar .continue-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+  .copy-btn {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 6px 10px; border-radius: 6px;
+    font-size: 11px; cursor: pointer;
+    display: flex; align-items: center; gap: 3px;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .copy-btn:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--accent); }
+  .copy-btn.copied { color: var(--green); border-color: var(--green); }
 </style>
 </head>
 <body>
@@ -141,6 +151,10 @@
   <a href="/static/qoder-sessions.html" class="back-btn">&larr; Sessions</a>
   <div class="title" id="title">Loading...</div>
   <div class="meta" id="meta"></div>
+  <div id="copyBtns" style="display:none; gap:6px; align-items:center; flex-shrink:0; display:none;">
+    <button class="copy-btn" id="copyIdBtn" title="Copy Session ID" onclick="copyText(sessionId, this, 'ID')">&#128203; ID</button>
+    <button class="copy-btn" id="copyCmdBtn" title="Copy resume command" onclick="copyCmd(this)">&#128196; CMD</button>
+  </div>
   <button class="continue-btn" id="topContinueBtn" style="display:none;" onclick="continueSession()">
     &nearr; Continue This Session
   </button>
@@ -231,6 +245,7 @@ if(__exports != exports)module.exports = exports;return module.exports}));
 </script>
 <script>
 const sessionId = new URLSearchParams(window.location.search).get('id');
+let sessionWorkingDir = '';
 
 if (!sessionId) {
   document.getElementById('messages').innerHTML = '<div class="empty">No session ID provided</div>';
@@ -244,12 +259,14 @@ async function loadSession() {
     const sessData = await sessResp.json();
     const session = (sessData.sessions || []).find(s => s.id === sessionId);
     if (session) {
+      sessionWorkingDir = session.working_dir || '';
       document.getElementById('title').textContent = session.title || 'Untitled Session';
       document.getElementById('meta').textContent =
         `${session.message_count} msgs \u00b7 ${new Date(session.updated_at).toLocaleString()}`;
       document.title = `${session.title || 'Session'} - Qoder`;
       document.getElementById('topContinueBtn').style.display = 'flex';
       document.getElementById('bottomContinueBtn').style.display = 'inline-flex';
+      document.getElementById('copyBtns').style.display = 'flex';
     }
   } catch (e) {
     console.error('Failed to load session info:', e);
@@ -291,6 +308,27 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+async function copyText(text, btn, label) {
+  try {
+    await navigator.clipboard.writeText(text);
+  } catch (e) {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  }
+  const orig = btn.innerHTML;
+  btn.innerHTML = '&#10003; Copied'; btn.classList.add('copied');
+  setTimeout(() => { btn.innerHTML = orig; btn.classList.remove('copied'); }, 1500);
+}
+
+function copyCmd(btn) {
+  const dir = sessionWorkingDir || '~';
+  const cmd = `cd ${dir} && qodercli --yolo -r ${sessionId}`;
+  copyText(cmd, btn, 'CMD');
 }
 
 async function continueSession() {

@@ -117,17 +117,66 @@
   }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; padding: 60px; color: var(--text-muted); }
+  .new-btn {
+    background: var(--accent); color: white; border: none;
+    padding: 8px 16px; border-radius: 8px;
+    font-size: 14px; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    transition: background 0.15s;
+  }
+  .new-btn:hover { background: var(--accent-hover); }
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0,0,0,0.5); display: flex;
+    align-items: center; justify-content: center; z-index: 1000;
+  }
+  .modal {
+    background: var(--bg-card); border-radius: 12px;
+    padding: 24px; width: 90%; max-width: 480px;
+    box-shadow: 0 20px 40px rgba(0,0,0,0.2);
+  }
+  .modal h3 { margin: 0 0 16px; font-size: 18px; }
+  .modal input {
+    width: 100%; padding: 12px; border: 1px solid var(--border);
+    border-radius: 8px; font-size: 14px; box-sizing: border-box;
+    font-family: monospace;
+  }
+  .modal input:focus { outline: none; border-color: var(--accent); }
+  .modal-hint { font-size: 12px; color: var(--text-muted); margin-top: 8px; }
+  .modal-actions { display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end; }
+  .modal-actions button { padding: 10px 20px; border-radius: 8px; font-size: 14px; cursor: pointer; }
+  .modal-actions .cancel { background: transparent; border: 1px solid var(--border); color: var(--text-secondary); }
+  .modal-actions .cancel:hover { background: var(--bg-secondary); }
+  .modal-actions .create { background: var(--accent); border: none; color: white; }
+  .modal-actions .create:hover { background: var(--accent-hover); }
+  .modal-actions .create:disabled { opacity: 0.6; cursor: not-allowed; }
 </style>
 </head>
 <body>
 <div class="container">
   <div class="header">
     <h1>Qoder Sessions</h1>
-    <a href="/" class="back-link">&larr; Back to Chat</a>
+    <div style="display:flex;align-items:center;gap:16px;">
+      <button class="new-btn" onclick="showNewSessionModal()">+ New Session</button>
+      <a href="/" class="back-link">&larr; Back to Chat</a>
+    </div>
   </div>
   <div class="stats" id="stats"></div>
   <div id="sessions" class="session-list">
     <div class="loading"><div class="spinner"></div>Loading sessions...</div>
+  </div>
+</div>
+
+<!-- New Session Modal -->
+<div class="modal-overlay" id="newSessionModal" style="display:none;" onclick="closeModalOnOverlay(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <h3>Create New Session</h3>
+    <input type="text" id="workdirInput" placeholder="/home/user/projects/my-project" />
+    <div class="modal-hint">Working directory path (leave empty for home directory)</div>
+    <div class="modal-actions">
+      <button class="cancel" onclick="closeNewSessionModal()">Cancel</button>
+      <button class="create" id="createBtn" onclick="createNewSession()">Create</button>
+    </div>
   </div>
 </div>
 <script>
@@ -252,6 +301,64 @@ async function continueSession(sessionId, btnEl) {
 }
 
 loadSessions();
+
+// New Session Modal
+function showNewSessionModal() {
+  document.getElementById('newSessionModal').style.display = 'flex';
+  document.getElementById('workdirInput').value = '';
+  document.getElementById('workdirInput').focus();
+}
+
+function closeNewSessionModal() {
+  document.getElementById('newSessionModal').style.display = 'none';
+}
+
+function closeModalOnOverlay(e) {
+  if (e.target.id === 'newSessionModal') {
+    closeNewSessionModal();
+  }
+}
+
+async function createNewSession() {
+  const btn = document.getElementById('createBtn');
+  const workdir = document.getElementById('workdirInput').value.trim();
+  
+  btn.disabled = true;
+  btn.textContent = 'Creating...';
+  
+  try {
+    const params = new URLSearchParams();
+    if (workdir) params.append('workdir', workdir);
+    
+    const resp = await fetch(`/api/v1/qoder/sessions/create?${params.toString()}`, {
+      method: 'POST'
+    });
+    
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({ detail: 'Create failed' }));
+      throw new Error(err.detail || 'Create failed');
+    }
+    
+    const result = await resp.json();
+    closeNewSessionModal();
+    
+    // Jump to the new session page
+    window.location.href = `/static/qoder-session.html?id=${result.session_id}`;
+    
+  } catch (e) {
+    alert('Failed to create session: ' + e.message);
+    console.error('Create error:', e);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Create';
+  }
+}
+
+// Handle Enter key in input
+document.getElementById('workdirInput').addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') createNewSession();
+  if (e.key === 'Escape') closeNewSessionModal();
+});
 </script>
 </body>
 </html>

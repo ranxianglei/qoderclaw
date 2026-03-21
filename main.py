@@ -565,6 +565,65 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0,
     return {"messages": messages, "total": total}
 
 
+@app.post("/api/qoder-sessions/create", summary="创建新会话", dependencies=[Depends(verify_api_key)])
+async def create_qoder_session(workdir: str = None):
+    """在指定目录创建新的 Qoder 会话。
+    
+    Args:
+        workdir: 工作目录路径，如果不指定则使用默认目录
+        
+    Returns:
+        session_id: 新创建的会话 ID
+        workdir: 实际使用的工作目录
+    """
+    import uuid
+    from pathlib import Path
+    
+    # 确定工作目录
+    if not workdir:
+        workdir = str(Path.home())
+    
+    # 确保目录存在
+    workdir_path = Path(workdir).expanduser().resolve()
+    workdir_path.mkdir(parents=True, exist_ok=True)
+    workdir = str(workdir_path)
+    
+    # 获取默认实例来创建会话
+    pm = get_process_manager()
+    instance_name = list(pm.configs.keys())[0] if pm.configs else None
+    
+    if not instance_name:
+        raise HTTPException(status_code=503, detail="No Qoder instance available")
+    
+    client = pm.clients.get(instance_name)
+    if not client:
+        raise HTTPException(status_code=503, detail="Qoder instance not running")
+    
+    # 生成唯一的 conversation_key
+    conversation_key = f"webui-{uuid.uuid4().hex[:8]}"
+    
+    # 创建会话，使用指定的 workdir
+    resp = await client._rpc_call("session/new", {"cwd": workdir})
+    
+    if resp is None:
+        raise HTTPException(status_code=500, detail="Failed to create session")
+    
+    session_id = resp.get("sessionId")
+    if not session_id:
+        raise HTTPException(status_code=500, detail="No sessionId in response")
+    
+    # 记录会话映射
+    client.sessions[conversation_key] = session_id
+    
+    logger.info(f"Created new session: {session_id} in {workdir}")
+    
+    return {
+        "session_id": session_id,
+        "workdir": workdir,
+        "conversation_key": conversation_key,
+    }
+
+
 @app.get("/api/qoder-sessions/{session_id}/stream", summary="实时监听会话消息 (SSE)", dependencies=[Depends(verify_api_key)])
 async def stream_qoder_session(session_id: str):
     """SSE endpoint for real-time session message streaming.

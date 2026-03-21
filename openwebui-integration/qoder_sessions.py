@@ -53,6 +53,24 @@ async def get_qoder_sessions():
         return resp.json()
 
 
+@router.post("/sessions/create", dependencies=[Depends(optional_auth)])
+async def create_qoder_session(workdir: str = ""):
+    """Create a new QoderClaw session in the specified directory."""
+    params = {}
+    if workdir:
+        params["workdir"] = workdir
+    
+    async with httpx.AsyncClient(timeout=10) as client:
+        resp = await client.post(
+            f"{QODERCLAW_BASE_URL}/api/qoder-sessions/create",
+            params=params,
+            headers={"Authorization": f"Bearer {QODERCLAW_API_KEY}"},
+        )
+        if resp.status_code != 200:
+            raise HTTPException(status_code=resp.status_code, detail="Failed to create session")
+        return resp.json()
+
+
 @router.get("/sessions/{session_id}/transcript", dependencies=[Depends(optional_auth)])
 async def get_qoder_session_transcript(session_id: str):
     """Get transcript for a specific QoderClaw session."""

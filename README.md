@@ -71,7 +71,113 @@ If you prefer to install manually, follow the steps below.
 
 ## Quick Start
 
-### 1. Install
+### 1. Automated Deployment (Recommended)
+
+Use the automated deployment script for one-click setup:
+
+```bash
+# Download and run the deployment script
+curl -fsSL https://raw.githubusercontent.com/ranxianglei/qoderclaw/main/deploy-auto.sh -o deploy-auto.sh
+chmod +x deploy-auto.sh
+./deploy-auto.sh
+```
+
+The script will:
+- ✅ Automatically detect system dependencies (qodercli, Docker, etc.)
+- ✅ Interactively collect configuration (ports, paths, API keys)
+- ✅ Optionally install systemd service for backend management
+- ✅ Deploy both backend (QoderClaw) and frontend (Open WebUI)
+- ✅ Start services and verify deployment
+- ✅ Generate configuration file for future use
+
+**Interactive deployment example:**
+```
+$ ./deploy-auto.sh
+[INFO] 检测到操作系统: linux (apt)
+[INFO] 检测到 systemd 支持
+[INFO] 正在检查系统依赖...
+[SUCCESS] 所有依赖检查通过
+[INFO] 发现现有配置文件: /path/to/deploy-config.json
+[INFO] 使用 systemd 管理服务? [y/N]: y
+[INFO] 开始部署 QoderClaw 后端...
+[SUCCESS] 后端配置完成
+[INFO] 安装 systemd 服务...
+[SUCCESS] systemd 服务已安装: qoderclaw
+[INFO] 启动 QoderClaw 后端...
+[SUCCESS] 后端启动成功 (systemd)
+[INFO] 开始部署 Open WebUI 前端...
+[SUCCESS] 前端启动成功
+[SUCCESS] 🎉 部署完成！
+
+=== QoderClaw 部署状态 ===
+
+后端: 运行中 (systemd)
+      地址: http://127.0.0.1:8080
+前端: 运行中 (端口: 3001)
+      地址: http://127.0.0.1:3001
+```
+
+**Management commands:**
+```bash
+# Service management
+./deploy-auto.sh start    # Start services
+./deploy-auto.sh stop     # Stop services
+./deploy-auto.sh restart  # Restart services
+./deploy-auto.sh status   # Show service status
+
+# With systemd (backend only)
+sudo systemctl start qoderclaw    # Start backend
+sudo systemctl stop qoderclaw     # Stop backend
+sudo systemctl restart qoderclaw  # Restart backend
+sudo systemctl status qoderclaw   # Check backend status
+sudo journalctl -u qoderclaw -f   # View backend logs
+
+# Frontend (Docker managed)
+docker start open-webui    # Start frontend
+docker stop open-webui     # Stop frontend
+docker restart open-webui  # Restart frontend
+docker logs open-webui -f  # View frontend logs
+```
+
+### Configuration Options
+
+The script generates `deploy-config.json` for repeatable deployments:
+
+```json
+{
+    "backend_port": 8080,
+    "frontend_port": 3001,
+    "host": "127.0.0.1",
+    "workdir": "/home/ubuntu/projects",
+    "qoderclaw_dir": "/home/ubuntu/mysoft/qoderclaw",
+    "api_key": "sk-qoderclaw-abcdef123456",
+    "use_systemd": true,
+    "created_at": "2026-03-21T10:30:00+00:00"
+}
+```
+
+**Command-line override:**
+```bash
+./deploy-auto.sh --backend-port 8080 --frontend-port 3001 \
+                 --workdir /path/to/project --api-key sk-custom-key
+```
+
+### System Requirements
+
+- **Linux**: systemd support recommended (Ubuntu 16.04+, CentOS 7+)
+- **macOS**: Standard process management (no systemd)
+- **Docker**: Required for Open WebUI frontend
+- **Python 3.8+**: Required for QoderClaw backend
+- **qodercli**: Must be installed separately
+
+### Security Notes
+
+- Backend listens on `127.0.0.1` by default (localhost only)
+- API Key authentication enabled
+- No external API keys required in configuration
+- Docker container isolated from host network (unless configured otherwise)
+
+### 1. Manual Installation
 
 ```bash
 cd qoderclaw

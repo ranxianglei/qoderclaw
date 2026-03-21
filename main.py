@@ -17,6 +17,7 @@ import secrets
 from fastapi import FastAPI, HTTPException, Depends, Security
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from loguru import logger
 import uvicorn
@@ -562,6 +563,98 @@ async def get_qoder_transcript(session_id: str, limit: int = 0, offset: int = 0,
         messages = messages[:limit] if len(messages) > limit else messages
     
     return {"messages": messages, "total": total}
+
+
+@app.get("/api/qoder-sessions/{session_id}/stream", summary="实时监听会话消息 (SSE)", dependencies=[Depends(verify_api_key)])
+async def stream_qoder_session(session_id: str):
+    """SSE endpoint for real-time session message streaming.
+    
+    Yields 'message' events for each new message in the session.
+    Client should reconnect on disconnect.
+    """
+    from datetime import datetime
+    
+    # Find the session file
+    qoder_projects = Path.home() / ".qoder" / "projects"
+    jsonl_file = None
+    for project_dir in qoder_projects.iterdir():
+        if not project_dir.is_dir():
+            continue
+        candidate = project_dir / f"{session_id}.jsonl"
+        if candidate.exists():
+            jsonl_file = candidate
+            break
+    
+    if not jsonl_file:
+        raise HTTPException(status_code=404, detail="Session not found")
+    
+    async def event_generator():
+        last_size = jsonl_file.stat().st_size
+        last_pos = last_size
+        
+        # Send initial connection event
+        yield f"event: connected\ndata: {{\"session_id\": \"{session_id}\"}}\n\n"
+        
+        while True:
+            try:
+                # Check file size
+                current_size = jsonl_file.stat().st_size
+                
+                if current_size > last_size:
+                    # Read new content
+                    with open(jsonl_file, "r") as f:
+                        f.seek(last_pos)
+                        new_lines = f.readlines()
+                        last_pos = f.tell()
+                    last_size = current_size
+                    
+                    # Parse and send new messages
+                    for line in new_lines:
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            data = json.loads(line)
+                            if data.get("type") in ("user", "assistant"):
+                                msg = data.get("message", {})
+                                content = msg.get("content", "")
+                                
+                                # Handle list content
+                                if isinstance(content, list):
+                                    text_parts = []
+                                    for part in content:
+                                        if isinstance(part, dict) and part.get("type") == "text":
+                                            text_parts.append(part.get("text", ""))
+                                        elif isinstance(part, str):
+                                            text_parts.append(part)
+                                    content = "\n".join(text_parts)
+                                
+                                if content:
+                                    event_data = json.dumps({
+                                        "role": msg.get("role", data["type"]),
+                                        "content": content,
+                                        "timestamp": data.get("timestamp", 0),
+                                    }, ensure_ascii=False)
+                                    yield f"event: message\ndata: {event_data}\n\n"
+                        except json.JSONDecodeError:
+                            continue
+                
+                await asyncio.sleep(0.5)  # Poll interval
+                
+            except Exception as e:
+                logger.error(f"SSE error: {e}")
+                yield f"event: error\ndata: {{\"error\": \"{str(e)}\"}}\n\n"
+                break
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @app.delete("/api/qoder-sessions/{session_id}", summary="删除会话", dependencies=[Depends(verify_api_key)])

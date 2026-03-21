@@ -144,6 +144,19 @@
   }
   .copy-btn:hover { background: var(--bg-secondary); color: var(--text-primary); border-color: var(--accent); }
   .copy-btn.copied { color: var(--green); border-color: var(--green); }
+  .live-btn {
+    background: transparent; color: var(--text-secondary);
+    border: 1px solid var(--border);
+    padding: 6px 12px; border-radius: 6px;
+    font-size: 11px; cursor: pointer;
+    display: flex; align-items: center; gap: 4px;
+    transition: all 0.15s; white-space: nowrap;
+  }
+  .live-btn:hover { background: var(--bg-secondary); }
+  .live-btn.active { background: var(--green); color: white; border-color: var(--green); }
+  .live-btn .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .live-btn.active .dot { animation: pulse 1s infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 </style>
 </head>
 <body>
@@ -155,6 +168,9 @@
     <button class="copy-btn" id="copyIdBtn" title="Copy Session ID" onclick="copyText(sessionId, this, 'ID')">&#128203; ID</button>
     <button class="copy-btn" id="copyCmdBtn" title="Copy resume command" onclick="copyCmd(this)">&#128196; CMD</button>
   </div>
+  <button class="live-btn" id="liveBtn" title="Toggle live mode" onclick="toggleLive()">
+    <span class="dot"></span> Live
+  </button>
   <button class="continue-btn" id="topContinueBtn" style="display:none;" onclick="continueSession()">
     &nearr; Continue This Session
   </button>
@@ -276,6 +292,7 @@ async function loadSession() {
     const resp = await fetch(`/api/v1/qoder/sessions/${sessionId}/transcript`);
     const data = await resp.json();
     const messages = data.messages || [];
+    totalMessages = data.total || messages.length;
     const el = document.getElementById('messages');
     if (!messages.length) {
       el.innerHTML = '<div class="empty">No messages in this session</div>';
@@ -329,6 +346,136 @@ function copyCmd(btn) {
   const dir = sessionWorkingDir || '~';
   const cmd = `cd ${dir} && qodercli --yolo -r ${sessionId}`;
   copyText(cmd, btn, 'CMD');
+}
+
+// Live mode
+let isLive = false;
+let liveInterval = null;
+let totalMessages = 0;
+let eventSource = null;
+
+function toggleLive() {
+  const btn = document.getElementById('liveBtn');
+  isLive = !isLive;
+  btn.classList.toggle('active', isLive);
+  
+  if (isLive) {
+    startLive();
+  } else {
+    stopLive();
+  }
+}
+
+function startLive() {
+  // Try SSE first, fall back to polling
+  try {
+    startSSE();
+  } catch (e) {
+    console.warn('SSE not available, using polling:', e);
+    startLivePolling();
+  }
+}
+
+function stopLive() {
+  stopSSE();
+  stopLivePolling();
+}
+
+function startSSE() {
+  if (eventSource) return;
+  
+  eventSource = new EventSource(`/api/v1/qoder/sessions/${sessionId}/stream`);
+  
+  eventSource.addEventListener('connected', (e) => {
+    console.log('SSE connected');
+  });
+  
+  eventSource.addEventListener('message', (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      appendMessages([msg]);
+      totalMessages++;
+      scrollToBottom();
+    } catch (err) {
+      console.error('SSE parse error:', err);
+    }
+  });
+  
+  eventSource.onerror = (e) => {
+    console.warn('SSE error, falling back to polling');
+    stopSSE();
+    startLivePolling();
+  };
+}
+
+function stopSSE() {
+  if (eventSource) {
+    eventSource.close();
+    eventSource = null;
+  }
+}
+
+function startLivePolling() {
+  if (liveInterval) return;
+  liveInterval = setInterval(pollNewMessages, 1500);
+}
+
+function stopLivePolling() {
+  if (liveInterval) {
+    clearInterval(liveInterval);
+    liveInterval = null;
+  }
+}
+
+async function pollNewMessages() {
+  if (!sessionId || totalMessages === 0) return;
+  
+  try {
+    const resp = await fetch(`/api/v1/qoder/sessions/${sessionId}/transcript?offset=${totalMessages}`);
+    if (!resp.ok) return;
+    const data = await resp.json();
+    const newMsgs = data.messages || [];
+    
+    if (newMsgs.length > 0) {
+      totalMessages = data.total;
+      appendMessages(newMsgs);
+      scrollToBottom();
+    }
+  } catch (e) {
+    console.error('Poll error:', e);
+  }
+}
+
+function scrollToBottom() {
+  const el = document.getElementById('messages');
+  const parent = el.parentElement;
+  if (parent.scrollHeight - parent.scrollTop - parent.clientHeight < 200) {
+    parent.scrollTop = parent.scrollHeight;
+  }
+}
+
+function appendMessages(msgs) {
+  const el = document.getElementById('messages');
+  marked.setOptions({ breaks: true, gfm: true });
+  
+  msgs.forEach(m => {
+    const role = m.role || 'assistant';
+    const avatarClass = role === 'user' ? 'user' : role === 'system' ? 'system' : 'assistant';
+    const avatarText = role === 'user' ? 'U' : role === 'system' ? 'S' : 'A';
+    const roleName = role === 'user' ? 'You' : role === 'system' ? 'System' : 'Assistant';
+    let content = '';
+    try { content = marked.parse(m.content || ''); } catch (e) { content = escapeHtml(m.content || ''); }
+    
+    const div = document.createElement('div');
+    div.className = 'message-row';
+    div.innerHTML = `
+      <div class="msg-role">
+        <div class="msg-avatar ${avatarClass}">${avatarText}</div>
+        <div class="msg-role-name">${roleName}</div>
+      </div>
+      <div class="msg-content">${content}</div>`;
+    el.appendChild(div);
+  });
 }
 
 async function continueSession() {

@@ -7,6 +7,7 @@ from typing import Optional
 import httpx
 from fastapi import APIRouter, HTTPException, Request, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
 log = logging.getLogger(__name__)
@@ -63,6 +64,34 @@ async def get_qoder_session_transcript(session_id: str):
         if resp.status_code != 200:
             raise HTTPException(status_code=resp.status_code, detail="Failed to fetch transcript")
         return resp.json()
+
+
+@router.get("/sessions/{session_id}/stream", dependencies=[Depends(optional_auth)])
+async def stream_qoder_session(session_id: str):
+    """SSE proxy for real-time session streaming."""
+    
+    async def event_generator():
+        async with httpx.AsyncClient(timeout=None) as client:
+            async with client.stream(
+                "GET",
+                f"{QODERCLAW_BASE_URL}/api/qoder-sessions/{session_id}/stream",
+                headers={"Authorization": f"Bearer {QODERCLAW_API_KEY}"},
+            ) as response:
+                if response.status_code != 200:
+                    yield f"event: error\ndata: {{\"error\": \"Failed to connect\"}}\n\n"
+                    return
+                async for chunk in response.aiter_text():
+                    yield chunk
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        }
+    )
 
 
 @router.post("/import-session/{session_id}", dependencies=[Depends(optional_auth)])

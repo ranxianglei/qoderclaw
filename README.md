@@ -41,6 +41,8 @@ If you prefer to install manually, follow the steps below.
 - **Tool call visualization** - Real-time display of Bash, file operations, and other tool executions in the web UI
 - **Control commands** - `/help`, `/status`, `/restart`, `/forget`, `/sessions`, etc.
 - **OpenAI-compatible API** - Any OpenAI-compatible frontend works out of the box
+- **Task cancellation** - Automatically cancel ongoing tasks when users send new messages (uses ACP `session/cancel`)
+- **Long-running support** - Configurable timeout up to 360 minutes for extended tasks
 
 ## Architecture
 
@@ -107,6 +109,44 @@ docker run -d \
 ```
 
 The `openwebui-integration/` directory contains extensions that are **copied into** the official Open WebUI image via `Dockerfile.openwebui`. It cannot run standalone.
+
+## Key Features
+
+### Task Cancellation (New!)
+
+When a user sends a new message while a previous response is still generating:
+
+1. **Automatic cancellation**: The backend detects the client disconnect
+2. **Graceful termination**: Uses ACP protocol's `session/cancel` RPC method
+3. **Immediate response**: qodercli stops and returns `stopReason="cancelled"`
+4. **Resource cleanup**: No zombie processes or wasted compute
+
+```python
+# Backend automatically cancels when client disconnects
+async def _stream_response(request, ...):
+    while streaming:
+        if request.is_disconnected():
+            await client.cancel_task(session_key)  # ← ACP session/cancel
+            break
+```
+
+### Long-Running Tasks
+
+Default timeout increased to **360 minutes** for extended operations:
+- Batch processing
+- Complex code analysis  
+- Large file operations
+- Multi-step deployments
+
+Configure in `openai_compat.py` and `qoder_manager.py`:
+```python
+timeout=21600  # 360 minutes
+```
+
+**Open WebUI**: Set environment variable:
+```bash
+-e AIOHTTP_CLIENT_TIMEOUT=21600
+```
 
 ## Quick Start
 

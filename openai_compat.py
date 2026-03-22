@@ -22,6 +22,9 @@ from qoder_manager import get_process_manager, QoderStatus
 
 router = APIRouter()
 
+# 跟踪每个 session 的活跃流式任务，用于新请求到来时取消旧任务
+_active_tasks: Dict[str, asyncio.Task] = {}
+
 
 # ---------------------------------------------------------------------------
 # Pydantic 模型（OpenAI 格式）
@@ -243,6 +246,17 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
         f"images={len(compressed_media)} stream={req.stream}"
     )
 
+    # 如果该 session 有正在进行的任务，先取消（处理停止按钮 / 堆积消息场景）
+    if session_key in _active_tasks:
+        old_task = _active_tasks.pop(session_key)
+        if not old_task.done():
+            logger.info(f"[openai] New request for {session_key}, canceling previous task")
+            try:
+                await client.cancel_task(session_key)
+            except Exception as e:
+                logger.warning(f"[openai] Cancel previous task failed: {e}")
+            old_task.cancel()
+
     completion_id = _gen_id()
     created = int(time.time())
 
@@ -251,7 +265,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
             _stream_response(
                 client, session_key, text, compressed_media,
                 completion_id, created, model_name,
-                cwd=session_workdir, request=request,
+                cwd=session_workdir,
             ),
             media_type="text/event-stream",
             headers={
@@ -291,7 +305,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
 async def _stream_response(
     client, session_key: str, text: str, media_parts: list,
     completion_id: str, created: int, model: str,
-    cwd: str = None, request=None,
+    cwd: str = None,
 ):
     """生成 SSE 流式响应"""
     chunk_queue: asyncio.Queue = asyncio.Queue()
@@ -309,46 +323,45 @@ async def _stream_response(
                 media_parts=media_parts if media_parts else None,
                 cwd=cwd,
             )
+        except asyncio.CancelledError:
+            logger.info(f"[openai] Send task cancelled for {session_key}")
         except Exception as e:
             logger.error(f"[openai] stream prompt error: {e}")
         finally:
             done_event.set()
 
     task = asyncio.create_task(_send())
+    _active_tasks[session_key] = task  # 注册活跃任务
 
-    # 发送 role chunk
-    yield _sse_chunk(completion_id, created, model, {"role": "assistant"})
+    try:
+        # 发送 role chunk
+        yield _sse_chunk(completion_id, created, model, {"role": "assistant"})
 
-    # 流式输出文本，同时检测客户端断开
-    while True:
-        # 检查客户端是否已断开
-        if request and request.is_disconnected():
-            logger.info(f"[openai] Client disconnected for {session_key}")
-            # 尝试取消任务（如果 session 已创建）
+        # 流式输出文本
+        while True:
             try:
-                await client.cancel_task(session_key)
-            except Exception as e:
-                logger.warning(f"[openai] Cancel failed (expected): {e}")
+                chunk_text = await asyncio.wait_for(chunk_queue.get(), timeout=0.5)
+                yield _sse_chunk(completion_id, created, model, {"content": chunk_text})
+            except asyncio.TimeoutError:
+                if done_event.is_set():
+                    # 排空队列
+                    while not chunk_queue.empty():
+                        chunk_text = chunk_queue.get_nowait()
+                        yield _sse_chunk(completion_id, created, model, {"content": chunk_text})
+                    break
+
+        # 发送完成标记
+        yield _sse_chunk(completion_id, created, model, {}, finish_reason="stop")
+        yield "data: [DONE]\n\n"
+    finally:
+        # 清理活跃任务跟踪
+        _active_tasks.pop(session_key, None)
+        if not task.done():
             task.cancel()
-            break
-        
-        # 尝试从队列取 chunk
         try:
-            chunk_text = await asyncio.wait_for(chunk_queue.get(), timeout=0.1)
-            yield _sse_chunk(completion_id, created, model, {"content": chunk_text})
-        except asyncio.TimeoutError:
-            if done_event.is_set():
-                # 排空队列
-                while not chunk_queue.empty():
-                    chunk_text = chunk_queue.get_nowait()
-                    yield _sse_chunk(completion_id, created, model, {"content": chunk_text})
-                break
-
-    # 发送完成标记
-    yield _sse_chunk(completion_id, created, model, {}, finish_reason="stop")
-    yield "data: [DONE]\n\n"
-
-    await task
+            await task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 def _sse_chunk(

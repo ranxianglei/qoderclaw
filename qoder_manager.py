@@ -456,7 +456,7 @@ class QoderAcpClient:
         self,
         conversation_key: str,
         text: str,
-        timeout: float = 300,
+        timeout: float = 21600,
         on_chunk: Optional[Callable[[str], None]] = None,
         media_parts: Optional[List[dict]] = None,
         cwd: str = None,  # 新增参数

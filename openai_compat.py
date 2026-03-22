@@ -251,7 +251,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
             _stream_response(
                 client, session_key, text, compressed_media,
                 completion_id, created, model_name,
-                cwd=session_workdir,
+                cwd=session_workdir, request=request,
             ),
             media_type="text/event-stream",
             headers={
@@ -291,7 +291,7 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
 async def _stream_response(
     client, session_key: str, text: str, media_parts: list,
     completion_id: str, created: int, model: str,
-    cwd: str = None,
+    cwd: str = None, request=None,
 ):
     """生成 SSE 流式响应"""
     chunk_queue: asyncio.Queue = asyncio.Queue()
@@ -319,8 +319,15 @@ async def _stream_response(
     # 发送 role chunk
     yield _sse_chunk(completion_id, created, model, {"role": "assistant"})
 
-    # 流式输出文本
+    # 流式输出文本，同时检测客户端断开
     while True:
+        # 检查客户端是否已断开
+        if request and request.is_disconnected():
+            logger.info(f"[openai] Client disconnected, canceling task for {session_key}")
+            await client.cancel_task(session_key)
+            task.cancel()
+            break
+        
         # 尝试从队列取 chunk
         try:
             chunk_text = await asyncio.wait_for(chunk_queue.get(), timeout=0.1)

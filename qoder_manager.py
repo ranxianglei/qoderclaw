@@ -452,6 +452,43 @@ class QoderAcpClient:
         except Exception as e:
             logger.warning(f"[{self.config.name}] 写入转录失败: {e}")
 
+
+    async def cancel_task(self, conversation_key: str) -> bool:
+        """取消指定会话的正在运行的任务。
+        
+        Args:
+            conversation_key: 会话标识
+            
+        Returns:
+            bool: 是否成功取消
+        """
+        session_id = self.sessions.get(conversation_key)
+        if not session_id:
+            logger.debug(f"[{self.config.name}] 会话不存在，无法取消：{conversation_key}")
+            return False
+        
+        logger.info(f"[{self.config.name}] 取消任务：{conversation_key} (session={session_id})")
+        
+        try:
+            # 发送 ACP session/cancel 请求
+            resp = await self._rpc_call("session/cancel", {
+                "sessionId": session_id
+            }, timeout=30)
+            
+            if resp is not None:
+                logger.info(f"[{self.config.name}] 任务已取消：{conversation_key}")
+                return True
+            else:
+                logger.warning(f"[{self.config.name}] 取消失败：{conversation_key}")
+                return False
+                
+        except asyncio.TimeoutError:
+            logger.error(f"[{self.config.name}] 取消超时：{conversation_key}")
+            return False
+        except Exception as e:
+            logger.error(f"[{self.config.name}] 取消异常：{e}")
+            return False
+
     async def send_prompt(
         self,
         conversation_key: str,

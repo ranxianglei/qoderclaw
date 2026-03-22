@@ -463,9 +463,18 @@ class QoderAcpClient:
             bool: 是否成功取消
         """
         session_id = self.sessions.get(conversation_key)
+        
+        # 如果 session 还在创建中，等待一下再试
         if not session_id:
-            logger.debug(f"[{self.config.name}] 会话不存在，无法取消：{conversation_key}")
-            return False
+            logger.debug(f"[{self.config.name}] 会话不在缓存中，尝试直接取消：{conversation_key}")
+            # 给一点时间让 send_prompt 完成 session 创建
+            await asyncio.sleep(0.5)
+            session_id = self.sessions.get(conversation_key)
+            
+            if not session_id:
+                # 仍然不存在，可能是并发问题或者 session 已经结束
+                logger.info(f"[{self.config.name}] 会话仍未找到，跳过取消：{conversation_key}")
+                return False
         
         logger.info(f"[{self.config.name}] 取消任务：{conversation_key} (session={session_id})")
         

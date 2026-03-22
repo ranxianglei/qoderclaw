@@ -323,8 +323,12 @@ async def _stream_response(
     while True:
         # 检查客户端是否已断开
         if request and request.is_disconnected():
-            logger.info(f"[openai] Client disconnected, canceling task for {session_key}")
-            await client.cancel_task(session_key)
+            logger.info(f"[openai] Client disconnected for {session_key}")
+            # 尝试取消任务（如果 session 已创建）
+            try:
+                await client.cancel_task(session_key)
+            except Exception as e:
+                logger.warning(f"[openai] Cancel failed (expected): {e}")
             task.cancel()
             break
         

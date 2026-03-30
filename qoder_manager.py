@@ -220,29 +220,100 @@ class QoderAcpClient:
         
         Args:
             conversation_key: 会话标识符
-            cwd: 工作目录，如果提供则覆盖配置中的默认目录
+            cwd: 工作目录，如果提供则用 qodercli subprocess 在该目录创建 session
         """
         if conversation_key in self.sessions:
             return self.sessions[conversation_key]
 
         # 优先级: 传入的 cwd > cwd_map 中保存的 > 配置的默认值
         workdir = cwd or self.cwd_map.get(conversation_key) or self.config.workdir
-        
-        resp = await self._rpc_call("session/new", {
-            "cwd": workdir,
-        })
 
+        if workdir and workdir != self.config.workdir:
+            # 有自定义 cwd：用 qodercli subprocess 在目标目录创建 session
+            # 这是唯一能保证 Qoder CLI 工作目录正确的方式
+            session_id = await self._create_session_via_subprocess(conversation_key, workdir)
+        else:
+            # 默认目录：走 ACP session/new
+            session_id = await self._create_session_via_acp(conversation_key, workdir)
+
+        if session_id:
+            self.sessions[conversation_key] = session_id
+            logger.info(f"[{self.config.name}] 新建会话: {conversation_key} → {session_id} (cwd={workdir})")
+        return session_id
+
+    async def _create_session_via_acp(self, conversation_key: str, workdir: str) -> Optional[str]:
+        """通过 ACP session/new 创建会话（用于默认目录）"""
+        resp = await self._rpc_call("session/new", {"cwd": workdir})
         if resp is None:
-            logger.error(f"[{self.config.name}] 创建会话失败: {conversation_key}")
+            logger.error(f"[{self.config.name}] ACP 创建会话失败: {conversation_key}")
             return None
-
         session_id = resp.get("sessionId")
         if not session_id:
             logger.error(f"[{self.config.name}] 响应中无 sessionId: {resp}")
+        return session_id
+
+    async def _create_session_via_subprocess(self, conversation_key: str, workdir: str) -> Optional[str]:
+        """通过 qodercli subprocess 在目标目录创建会话，再用 loadSession 接入 ACP"""
+        import subprocess
+        import shutil
+
+        workdir_path = Path(workdir).expanduser().resolve()
+        if not workdir_path.exists():
+            logger.warning(f"[{self.config.name}] 目录不存在，回退到 ACP: {workdir}")
+            return await self._create_session_via_acp(conversation_key, workdir)
+
+        qodercli_path = shutil.which("qodercli") or str(Path.home() / ".local" / "bin" / "qodercli")
+        cmd = [qodercli_path, "-w", str(workdir_path), "-p", "ok", "--yolo", "-q", "-f", "json"]
+        env = os.environ.copy()
+        env["PATH"] = f"{Path.home() / '.local' / 'bin'}:{env.get('PATH', '')}"
+
+        logger.info(f"[{self.config.name}] subprocess 创建 session: {workdir_path}")
+        try:
+            proc = await asyncio.wait_for(
+                asyncio.get_event_loop().run_in_executor(
+                    None,
+                    lambda: subprocess.run(cmd, cwd=str(workdir_path), env=env,
+                                           capture_output=True, text=True, timeout=120)
+                ),
+                timeout=130,
+            )
+        except asyncio.TimeoutError:
+            logger.error(f"[{self.config.name}] qodercli subprocess 超时")
+            return None
+        except Exception as e:
+            logger.error(f"[{self.config.name}] qodercli subprocess 异常: {e}")
             return None
 
-        self.sessions[conversation_key] = session_id
-        logger.info(f"[{self.config.name}] 新建会话: {conversation_key} → {session_id} (cwd={workdir})")
+        if proc.returncode != 0:
+            logger.error(f"[{self.config.name}] qodercli 退出码 {proc.returncode}: {proc.stderr[:300]}")
+            return None
+
+        # 从 JSON 输出解析 session_id
+        session_id = None
+        for line in proc.stdout.strip().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                data = json.loads(line)
+                if data.get("session_id"):
+                    session_id = data["session_id"]
+                    break
+            except json.JSONDecodeError:
+                continue
+
+        if not session_id:
+            logger.error(f"[{self.config.name}] 无法从 subprocess 输出解析 session_id: {proc.stdout[:300]}")
+            return None
+
+        # subprocess 在目标目录创建了 session（working_dir 已写入 session 文件）
+        # 用 session/load 让 ACP 常驻进程接管，后续消息走 ACP session/prompt
+        resp = await self._rpc_call("session/load", {"sessionId": session_id, "cwd": str(workdir_path)})
+        if resp is None:
+            logger.error(f"[{self.config.name}] session/load 失败: {session_id}")
+            return None
+
+        logger.info(f"[{self.config.name}] session/load 成功: {session_id} (cwd={workdir_path})")
         return session_id
 
     async def destroy_session(self, conversation_key: str) -> bool:
@@ -627,6 +698,7 @@ class QoderAcpClient:
             self._prompt_texts.pop(req_id, None)
             self._prompt_callbacks.pop(req_id, None)
             return None
+
 
     # ------------------------------------------------------------------
     # JSON-RPC 底层通信

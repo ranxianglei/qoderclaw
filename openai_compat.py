@@ -179,8 +179,15 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     pm = get_process_manager()
 
     # DEBUG: 打印完整请求体
-    logger.debug(f"[openai] 请求头: {dict(request.headers)}")
-    logger.debug(f"[openai] 请求体 messages: {[{'role': m.role, 'content': str(m.content)[:200]} for m in req.messages]}")
+    logger.info(f"[openai] 请求头: {dict(request.headers)}")
+    logger.info(f"[openai] 请求体 messages: {[{'role': m.role, 'content': str(m.content)[:500]} for m in req.messages]}")
+    # 打印完整的 req 对象看有没有额外字段
+    try:
+        import json
+        req_dict = json.loads(req.json())
+        logger.info(f"[openai] 完整请求体: {json.dumps(req_dict, indent=2, ensure_ascii=False)[:2000]}")
+    except Exception as e:
+        logger.warning(f"[openai] 无法序列化请求体: {e}")
 
     # 选择 Qoder 实例
     model_name = req.model
@@ -209,6 +216,29 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
                     session_workdir = m.group(1).rstrip(".")
                     logger.info(f"[openai] 从 system message 提取 cwd: {session_workdir}")
                     break
+
+    # 如果还没有 cwd，尝试从 opencode 本地 API 获取
+    if not session_workdir or session_workdir in ["${PWD}", "{cwd}"]:
+        try:
+            import httpx
+            import os
+            # 从环境变量或配置读取 opencode API 地址，默认 127.0.0.1:3000
+            opencode_api_base = os.environ.get("OPENCODE_API_BASE", "http://127.0.0.1:3000")
+            async with httpx.AsyncClient() as http_client:
+                resp = await http_client.get(f"{opencode_api_base}/session", timeout=2.0)
+                if resp.status_code == 200:
+                    sessions = resp.json()
+                    if sessions:
+                        # 找最新的 session（time.created 最大）
+                        latest = max(sessions, key=lambda s: s.get("time", {}).get("created", 0))
+                        session_workdir = latest.get("directory")
+                        opencode_session_id = latest.get("id")
+                        logger.info(f"[openai] 从 opencode API 获取 cwd: {session_workdir} (session={opencode_session_id})")
+                        # 用 opencode session ID 作为 session_key 的一部分，确保不同项目用不同 session
+                        if opencode_session_id:
+                            session_key = f"oc-{opencode_session_id}"
+        except Exception as e:
+            logger.warning(f"[openai] 无法从 opencode API 获取 cwd: {e}")
 
     # 如果没有 session header，基于首条用户消息生成稳定 session ID
     # 这样同一个对话的后续请求（消息列表增长但首条不变）会映射到同一个 Qoder session

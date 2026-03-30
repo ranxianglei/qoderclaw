@@ -56,6 +56,9 @@ def _extract_content(messages: List[ChatMessage]) -> tuple[str, list]:
     """
     从 OpenAI messages 中提取最后一条用户消息的文本和图片。
 
+    Qoder CLI 内部通过 session 维护对话上下文，
+    所以这里只需提取最后一条用户消息即可，不需要重复发送历史。
+
     OpenAI 格式中 content 可以是：
     - 字符串: "Hello"
     - 数组: [{"type": "text", "text": "..."}, {"type": "image_url", "image_url": {"url": "data:..."}}]
@@ -188,16 +191,31 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
         return _error_response(503, "No running Qoder instance available")
 
     # 从请求头获取 session ID
-    # 如果没有提供，尝试加载最近使用的会话，避免创建过多新会话
+    # 优先级: x-openwebui-chat-id > x-session-id > 基于首条消息哈希生成稳定 ID
     session_key = request.headers.get("x-openwebui-chat-id") or request.headers.get("x-session-id")
     session_workdir = None  # 对应session的工作目录
 
-    # 查找session对应的working_dir（无论session_key是否存在）
+    # 如果没有 session header，基于首条用户消息生成稳定 session ID
+    # 这样同一个对话的后续请求（消息列表增长但首条不变）会映射到同一个 Qoder session
+    if not session_key:
+        import hashlib
+        first_user_msg = ""
+        for msg in req.messages:
+            if msg.role == "user":
+                first_user_msg = msg.content if isinstance(msg.content, str) else str(msg.content)
+                break
+        if first_user_msg:
+            session_hash = hashlib.md5(first_user_msg.encode()).hexdigest()[:12]
+            session_key = f"oc-{session_hash}"
+            logger.info(f"[openai] Generated stable session from first message: {session_key}")
+        else:
+            session_key = f"web-{uuid.uuid4().hex[:8]}"
+            logger.info(f"[openai] No session context, creating new: {session_key}")
+
+    # 查找session对应的working_dir
     from pathlib import Path
     import json as _json
     qoder_projects = Path.home() / ".qoder" / "projects"
-    latest_session = None
-    latest_time = 0
 
     if qoder_projects.exists():
         for project_dir in qoder_projects.iterdir():
@@ -208,24 +226,10 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
                     with open(session_file, "r") as f:
                         data = _json.load(f)
                     sid = session_file.stem.replace("-session", "")
-                    # 如果找到了对应的session，记录其working_dir
-                    if session_key and sid == session_key:
+                    if sid == session_key:
                         session_workdir = data.get("working_dir")
-                    # 同时记录最近更新的session（用于no session_key情况）
-                    if data.get("updated_at", 0) > latest_time:
-                        latest_time = data["updated_at"]
-                        latest_session = sid
                 except:
                     continue
-
-    if not session_key:
-        if latest_session:
-            session_key = latest_session
-            session_workdir = None  # 最近session的workdir会在下次循环中找到，此处简化
-            logger.info(f"[openai] No session provided, using latest: {session_key}")
-        else:
-            session_key = f"web-{uuid.uuid4().hex[:8]}"
-            logger.info(f"[openai] No session provided, creating new: {session_key}")
 
     if session_workdir:
         logger.info(f"[openai] session={session_key} workdir={session_workdir}")

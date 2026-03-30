@@ -178,6 +178,10 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     """OpenAI 兼容的 chat completions 接口"""
     pm = get_process_manager()
 
+    # DEBUG: 打印完整请求体
+    logger.debug(f"[openai] 请求头: {dict(request.headers)}")
+    logger.debug(f"[openai] 请求体 messages: {[{'role': m.role, 'content': str(m.content)[:200]} for m in req.messages]}")
+
     # 选择 Qoder 实例
     model_name = req.model
     client = pm.get_client(model_name)
@@ -193,7 +197,18 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
     # 从请求头获取 session ID
     # 优先级: x-openwebui-chat-id > x-session-id > 基于首条消息哈希生成稳定 ID
     session_key = request.headers.get("x-openwebui-chat-id") or request.headers.get("x-session-id")
-    session_workdir = None  # 对应session的工作目录
+    session_workdir = request.headers.get("x-opencode-cwd") or None  # opencode 传入的工作目录
+
+    # 从 system message 中提取工作目录
+    # opencode 格式: "... Current working directory: /path/to/project ..."
+    if not session_workdir:
+        for msg in req.messages:
+            if msg.role == "system" and isinstance(msg.content, str):
+                m = re.search(r"[Cc]urrent working directory[:\s]+(\S+)", msg.content)
+                if m:
+                    session_workdir = m.group(1).rstrip(".")
+                    logger.info(f"[openai] 从 system message 提取 cwd: {session_workdir}")
+                    break
 
     # 如果没有 session header，基于首条用户消息生成稳定 session ID
     # 这样同一个对话的后续请求（消息列表增长但首条不变）会映射到同一个 Qoder session
@@ -211,25 +226,6 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
         else:
             session_key = f"web-{uuid.uuid4().hex[:8]}"
             logger.info(f"[openai] No session context, creating new: {session_key}")
-
-    # 查找session对应的working_dir
-    from pathlib import Path
-    import json as _json
-    qoder_projects = Path.home() / ".qoder" / "projects"
-
-    if qoder_projects.exists():
-        for project_dir in qoder_projects.iterdir():
-            if not project_dir.is_dir():
-                continue
-            for session_file in project_dir.glob("*-session.json"):
-                try:
-                    with open(session_file, "r") as f:
-                        data = _json.load(f)
-                    sid = session_file.stem.replace("-session", "")
-                    if sid == session_key:
-                        session_workdir = data.get("working_dir")
-                except:
-                    continue
 
     if session_workdir:
         logger.info(f"[openai] session={session_key} workdir={session_workdir}")
@@ -403,3 +399,4 @@ def _error_response(status_code: int, message: str):
 
 # 导出主路由实例
 app = router
+# DEBUG: 打印所有请求头（临时调试）

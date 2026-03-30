@@ -69,6 +69,7 @@ class QoderAcpClient:
         self.config = config
         self.process: Optional[asyncio.subprocess.Process] = None
         self.sessions: Dict[str, str] = {}  # conversation_key → acp session_id
+        self.cwd_map: Dict[str, str] = {}  # conversation_key → custom cwd
         self._initialized = False
         self._lock = asyncio.Lock()  # 保证写入 stdin 的串行化
         self._next_id = 1
@@ -224,8 +225,8 @@ class QoderAcpClient:
         if conversation_key in self.sessions:
             return self.sessions[conversation_key]
 
-        # 使用传入的 cwd，否则使用配置的默认值
-        workdir = cwd or self.config.workdir
+        # 优先级: 传入的 cwd > cwd_map 中保存的 > 配置的默认值
+        workdir = cwd or self.cwd_map.get(conversation_key) or self.config.workdir
         
         resp = await self._rpc_call("session/new", {
             "cwd": workdir,
@@ -241,7 +242,7 @@ class QoderAcpClient:
             return None
 
         self.sessions[conversation_key] = session_id
-        logger.info(f"[{self.config.name}] 新建会话: {conversation_key} → {session_id}")
+        logger.info(f"[{self.config.name}] 新建会话: {conversation_key} → {session_id} (cwd={workdir})")
         return session_id
 
     async def destroy_session(self, conversation_key: str) -> bool:
@@ -258,10 +259,10 @@ class QoderAcpClient:
     # 命令处理
     # ------------------------------------------------------------------
 
-    async def _handle_command(self, session_id: str, text: str) -> Optional[str]:
+    async def _handle_command(self, conversation_key: str, text: str) -> Optional[str]:
         """
         处理命令。支持两种方式：
-        1. 斜杠命令：/model lite, /mode architect, /forget, /help
+        1. 斜杠命令：/model lite, /mode architect, /forget, /help, /cd /path
         2. 自然语言：切换模型为lite, 使用lite模型, switch to lite model
 
         返回命令执行结果，如果不是命令则返回 None。
@@ -273,10 +274,10 @@ class QoderAcpClient:
 
         # 尝试斜杠命令
         if clean_text.startswith("/"):
-            return await self._handle_slash_command(session_id, clean_text)
+            return await self._handle_slash_command(conversation_key, clean_text)
 
         # 尝试自然语言命令
-        return await self._handle_natural_command(session_id, clean_text)
+        return await self._handle_natural_command(conversation_key, clean_text)
 
     @staticmethod
     def _strip_openclaw_metadata(text: str) -> str:
@@ -287,27 +288,33 @@ class QoderAcpClient:
         cleaned = re.sub(pattern, '', text, count=1, flags=re.DOTALL)
         return cleaned
 
-    async def _handle_slash_command(self, session_id: str, text: str) -> Optional[str]:
+    async def _handle_slash_command(self, conversation_key: str, text: str) -> Optional[str]:
         """处理 / 开头的命令"""
         parts = text.split(None, 1)
         command = parts[0].lower()
         args = parts[1].strip() if len(parts) > 1 else ""
+
+        # 获取 session_id（可能不存在）
+        session_id = self.sessions.get(conversation_key)
 
         if command == "/model":
             return await self._do_switch_model(session_id, args)
         elif command == "/mode":
             return await self._do_switch_mode(session_id, args)
         elif command == "/forget":
-            return self._do_forget(session_id)
+            return self._do_forget(conversation_key)
+        elif command == "/cd":
+            return self._do_cd(conversation_key, args)
         elif command == "/help":
             return self._do_help()
         else:
             return f"未知命令: {command}\n输入 /help 查看可用命令"
 
-    async def _handle_natural_command(self, session_id: str, text: str) -> Optional[str]:
+    async def _handle_natural_command(self, conversation_key: str, text: str) -> Optional[str]:
         """处理自然语言命令。返回 None 表示不是命令，交给 AI 处理。"""
         import re
         t = text.lower().strip()
+        session_id = self.sessions.get(conversation_key)
 
         # 模型切换：匹配 "切换模型为lite" / "使用lite模型" / "switch to lite" 等
         model_patterns = [
@@ -340,7 +347,7 @@ class QoderAcpClient:
 
         # 清除历史
         if re.search(r'清[除空].*?(?:会话|历史|记录|对话)|(?:forget|clear|reset)\s*(?:session|history|chat)', t):
-            return self._do_forget(session_id)
+            return self._do_forget(conversation_key)
 
         return None
 
@@ -368,13 +375,28 @@ class QoderAcpClient:
             return f"模式已切换为: {mode_id}"
         return "切换模式失败"
 
-    def _do_forget(self, session_id: str) -> str:
-        # 通过 session_id 反查 conversation_key
-        for key, sid in list(self.sessions.items()):
-            if sid == session_id:
-                self.sessions.pop(key, None)
-                break
+    def _do_forget(self, conversation_key: str) -> str:
+        self.sessions.pop(conversation_key, None)
+        self.cwd_map.pop(conversation_key, None)
         return "会话历史已清除，下次发消息将开启新会话"
+
+    def _do_cd(self, conversation_key: str, path: str) -> str:
+        """切换工作目录。下次发消息时创建新 session 使用新目录"""
+        if not path:
+            current = self.cwd_map.get(conversation_key) or self.config.workdir
+            return f"当前工作目录: {current}"
+
+        expanded = os.path.expanduser(path)
+        expanded = os.path.abspath(expanded)
+
+        if not os.path.isdir(expanded):
+            return f"目录不存在: {expanded}"
+
+        # 保存新 cwd，并销毁旧 session（下次会用新目录创建新 session）
+        self.cwd_map[conversation_key] = expanded
+        self.sessions.pop(conversation_key, None)
+        logger.info(f"[{self.config.name}] 工作目录切换: {conversation_key} → {expanded}")
+        return f"工作目录已切换为: {expanded}\n（已重置会话，下次消息将在新目录中开启新会话）"
 
     @staticmethod
     def _do_help() -> str:
@@ -385,6 +407,9 @@ class QoderAcpClient:
   或直接说: 切换模型为lite / switch to lite model
 
 /mode <modeId> - 切换模式
+
+/cd <path> - 切换工作目录（下次消息生效）
+  例如: /cd /home/ubuntu/myproject
 
 /forget - 清除当前会话历史
   或直接说: 清除会话历史 / clear history
@@ -523,7 +548,7 @@ class QoderAcpClient:
             return None
 
         # 解析并处理特殊命令（以 / 开头）
-        command_result = await self._handle_command(session_id, text)
+        command_result = await self._handle_command(conversation_key, text)
         if command_result is not None:
             # 命令已被处理，返回结果
             return command_result

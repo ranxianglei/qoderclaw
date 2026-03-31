@@ -6,7 +6,7 @@ Qoder AI 助手的多平台桥接器。
 - **Opencode 集成**（推荐）- 无缝的 AI 编程助手体验
 - **OpenAI 兼容 API** - 开箱即用，支持所有 OpenAI 兼容客户端
 
-**无需公网 IP**，飞书端使用 WebSocket 长连接主动接收消息。
+**无需公网 IP** - Opencode 直接通过本地连接，无需网络配置。
 
 ---
 
@@ -15,8 +15,8 @@ Qoder AI 助手的多平台桥接器。
 **让 AI 帮你安装！** 将 [`qoderclaw-install-prompt.md`](qoderclaw-install-prompt.md) 中的提示词复制给任意 AI 助手，它会自动：
 
 ✅ 检测 qodercli 是否已安装  
-✅ 检查并更新 npm/Node.js（如需）  
-✅ 跳过飞书配置（仅 Web 模式）  
+✅ 自动检测 Opencode 端口并配置连接  
+✅ 配置 QoderClaw 后端与 Opencode 集成  
 ✅ 配置安全的 localhost 访问（127.0.0.1）  
 ✅ 完成所有安装和配置步骤  
 
@@ -34,17 +34,18 @@ Qoder AI 助手的多平台桥接器。
 
 ## 功能特性
 
-- **双端接入**：飞书机器人 + Web 前端（Open WebUI 等 OpenAI 兼容客户端）
+- **Opencode 集成**（推荐）- 原生 AI 编程助手，自动检测工作目录
+- **OpenAI 兼容 API** - 支持所有 OpenAI 兼容客户端（Opencode、Open WebUI 等）
 - **流式输出**：实时显示 AI 回复，打字机效果
 - **多模态支持**：
   - 图片：自动压缩后发送给 Qoder 识别
   - 语音：降级为文本提示（Qoder 暂不支持音频）
 - **多实例管理**：支持多个独立 Qoder 进程
-- **多会话管理**：飞书端支持创建/切换/管理多个会话（交互式卡片）
-- **会话同步**：Web 前端可加载并续用 CLI/飞书中的 Qoder 会话
-- **工具调用可视化**：Web 前端实时显示 Bash/文件操作等工具执行状态
-- **控制命令**：`/help`、`/status`、`/restart`、`/forget`、`/sessions` 等
-- **OpenAI 兼容 API**：任何 OpenAI 兼容前端可直接对接
+- **多会话管理**：创建/切换/管理多个会话
+- **工具调用可视化**：实时显示 Bash/文件操作等工具执行状态
+- **控制命令**：`/help`、`/status`、`/restart`、`/forget`、`/sessions`、`/cd` 等
+- **任务取消**：用户发送新消息时自动取消正在进行的任务
+- **长任务支持**：可配置超时时间，最长 360 分钟
 
 ## 架构
 

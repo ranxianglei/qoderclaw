@@ -8,7 +8,7 @@ Multi-platform bridge for [Qoder](https://qoder.com) AI assistant.
 - **Opencode Integration** (Recommended) - Seamless AI coding assistant experience
 - **OpenAI-Compatible API** - Works with any OpenAI-compatible client out of the box
 
-**No public IP required** - Lark/Feishu uses WebSocket for message delivery.
+**No public IP required** - Opencode connects directly via localhost, no network configuration needed.
 
 ---
 
@@ -17,8 +17,8 @@ Multi-platform bridge for [Qoder](https://qoder.com) AI assistant.
 **Let AI install it for you!** Copy the prompt from [`qoderclaw-install-prompt.md`](qoderclaw-install-prompt.md) to any AI assistant, and it will:
 
 ✅ Auto-check qodercli installation  
-✅ Detect and update npm/Node.js if needed  
-✅ Skip Feishu/Lark configuration (web-only mode)  
+✅ Auto-detect Opencode port and configure connection  
+✅ Set up QoderClaw backend with Opencode integration  
 ✅ Configure secure localhost-only access (127.0.0.1)  
 ✅ Set up everything automatically  
 
@@ -36,16 +36,15 @@ If you prefer to install manually, follow the steps below.
 
 ## Features
 
-- **Dual access** - Lark/Feishu bot + Web frontend (Open WebUI or any OpenAI-compatible client)
+- **Opencode Integration** (Recommended) - Native AI coding assistant with automatic workspace detection
+- **OpenAI-compatible API** - Works with any OpenAI-compatible client (Opencode, Open WebUI, etc.)
 - **Streaming output** - Real-time AI responses with typewriter effect
 - **Multimodal** - Image recognition (auto-compressed), voice/file graceful degradation
 - **Multi-instance** - Run multiple independent Qoder processes
-- **Multi-session** - Create, switch, and manage sessions via interactive Lark cards
-- **Session sync** - Web frontend can load and continue CLI/Lark sessions
-- **Tool call visualization** - Real-time display of Bash, file operations, and other tool executions in the web UI
-- **Control commands** - `/help`, `/status`, `/restart`, `/forget`, `/sessions`, etc.
-- **OpenAI-compatible API** - Any OpenAI-compatible frontend works out of the box
-- **Task cancellation** - Automatically cancel ongoing tasks when users send new messages (uses ACP `session/cancel`)
+- **Multi-session** - Create, switch, and manage multiple sessions
+- **Tool call visualization** - Real-time display of Bash, file operations, and other tool executions
+- **Control commands** - `/help`, `/status`, `/restart`, `/forget`, `/sessions`, `/cd`, etc.
+- **Task cancellation** - Automatically cancel ongoing tasks when users send new messages
 - **Long-running support** - Configurable timeout up to 360 minutes for extended tasks
 
 ## Architecture

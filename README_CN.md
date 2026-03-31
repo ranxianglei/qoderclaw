@@ -148,8 +148,8 @@ docker logs open-webui -f  # 查看前端日志
     "backend_port": 8080,
     "frontend_port": 3001,
     "host": "127.0.0.1",
-    "workdir": "/home/ubuntu/projects",
-    "qoderclaw_dir": "/home/ubuntu/mysoft/qoderclaw",
+    "workdir": "/path/to/your/projects",
+    "qoderclaw_dir": "/path/to/qoderclaw",
     "api_key": "sk-qoderclaw-abcdef123456",
     "use_systemd": true,
     "created_at": "2026-03-21T10:30:00+00:00"
@@ -219,14 +219,72 @@ qoder_instances:
 ./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
-### 4. 部署 Open WebUI 前端（可选）
+### 4. 接入 Opencode（推荐）
 
-QoderClaw 集成了 [Open WebUI](https://github.com/ranxianglei/open-webui) 作为 Web 前端，提供完整的会话管理和跨平台同步功能。
+QoderClaw 可以无缝接入 [Opencode](https://github.com/sst/opencode) 作为自定义 AI 提供商。这是**推荐**的使用方式。
 
-#### Docker 部署（推荐）
+#### 前置要求
+
+- 安装并运行 Opencode 应用：https://github.com/sst/opencode
+- QoderClaw 后端必须已启动（见第 3 步）
+- **Opencode Web UI 必须可访问**（默认：http://localhost:3000），以便 QoderClaw 查询会话信息
+
+#### 配置 QoderClaw 以支持 Opencode
+
+设置 Opencode API 地址（如果不使用默认的 localhost:3000）：
 
 ```bash
-# 克隆 QoderClaw 集成版（指定分支）
+export OPENCODE_API_BASE="http://127.0.0.1:3000"
+```
+
+或添加到启动脚本（`start.sh`）：
+
+```bash
+# Opencode API 配置（用于获取工作目录）
+export OPENCODE_API_BASE="${OPENCODE_API_BASE:-http://127.0.0.1:3000}"
+```
+
+#### 配置 Opencode
+
+1. 打开 Opencode 应用
+2. 按 Ctrl/Cmd + , 打开设置
+3. 进入 **AI** → **添加提供商**
+4. 配置 OpenAI 兼容提供商：
+   - **名称**：`QoderClaw`
+   - **Base URL**：`http://localhost:8080/v1`
+   - **API Key**：`sk-qoderclaw`（或你配置的密钥）
+   - **模型**：`default-assistant`
+5. 开始使用！
+
+#### 已知限制
+
+⚠️ **工作目录问题**：由于 Opencode 的 Session API 设计限制，切换项目时 QoderClaw 可能无法正确识别当前项目的实际路径。
+
+**临时解决方案**：使用 `/cd` 命令手动设置工作目录：
+```
+/cd /path/to/your/project
+```
+
+⚠️ **Bug - 需要重启**：在 Opencode 中切换项目后，需要**重启 Opencode Web UI** 才能使新的工作目录生效。
+
+**操作步骤**：
+1. 在 Opencode 中切换项目
+2. 完全退出 Opencode（Cmd+Q / Ctrl+Q）
+3. 重新打开 Opencode
+4. 继续对话
+
+或者使用 `/cd` 命令手动设置目录（无需重启）。
+
+详细技术分析见 [TODO-OPENCODE.md](TODO-OPENCODE.md)。
+
+### 5. 接入 Open WebUI（可选）
+
+如需功能更完善的 Web 界面和会话管理，可以选择部署 Open WebUI。
+
+#### 部署 Open WebUI
+
+```bash
+# 克隆 QoderClaw 集成版
 git clone -b main https://github.com/ranxianglei/open-webui.git
 cd open-webui
 
@@ -274,7 +332,7 @@ npm run build
 ./start.sh
 ```
 
-#### 配置 Open WebUI 连接
+#### 配置 Open WebUI 连接（可选）
 
 1. 浏览器打开 http://localhost:3001
 2. 首次访问创建管理员账号
@@ -290,7 +348,7 @@ npm run build
 - **继续会话**：点击"继续会话"按钮将 QoderClaw 会话导入 Open WebUI，保留完整上下文
 - **跨平台同步**：飞书/CLI 创建的会话可在 Web 端继续使用
 
-### 5. 在飞书中使用（可选）
+### 6. 在飞书中使用（可选）
 
 直接给机器人发消息即可：
 

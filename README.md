@@ -227,8 +227,8 @@ The script generates `deploy-config.json` for repeatable deployments:
     "backend_port": 8080,
     "frontend_port": 3001,
     "host": "127.0.0.1",
-    "workdir": "/home/ubuntu/projects",
-    "qoderclaw_dir": "/home/ubuntu/mysoft/qoderclaw",
+    "workdir": "/path/to/your/projects",
+    "qoderclaw_dir": "/path/to/qoderclaw",
     "api_key": "sk-qoderclaw-abcdef123456",
     "use_systemd": true,
     "created_at": "2026-03-21T10:30:00+00:00"
@@ -312,9 +312,67 @@ feishu_bots:
 ./venv/bin/python main.py --host 127.0.0.1 --port 8080
 ```
 
-### 4. Connect Open WebUI (Optional)
+### 4. Connect Opencode (Recommended)
 
-QoderClaw integrates with [Open WebUI](https://github.com/ranxianglei/open-webui) for a full-featured web interface with session management.
+QoderClaw integrates seamlessly with [Opencode](https://github.com/sst/opencode) as a custom AI provider. This is the **recommended** way to use QoderClaw.
+
+#### Prerequisites
+
+- Install and run Opencode app: https://github.com/sst/opencode
+- QoderClaw backend must be running (see Step 3)
+- **Opencode Web UI must be accessible** (default: http://localhost:3000) for QoderClaw to query session info
+
+#### Configure QoderClaw for Opencode
+
+Set the Opencode API address (if not using default localhost:3000):
+
+```bash
+export OPENCODE_API_BASE="http://127.0.0.1:3000"
+```
+
+Or add to your startup script (`start.sh`):
+
+```bash
+# Opencode API configuration (for getting working directory)
+export OPENCODE_API_BASE="${OPENCODE_API_BASE:-http://127.0.0.1:3000}"
+```
+
+#### Configure Opencode
+
+1. Open Opencode app
+2. Press Ctrl/Cmd + , to open settings
+3. Go to **AI** → **Add Provider**
+4. Configure OpenAI-compatible provider:
+   - **Name**: `QoderClaw`
+   - **Base URL**: `http://localhost:8080/v1`
+   - **API Key**: `sk-qoderclaw` (or your configured key)
+   - **Model**: `default-assistant`
+5. Start chatting!
+
+#### Known Limitations
+
+⚠️ **Working Directory Issue**: Due to Opencode's Session API design, QoderClaw may not correctly detect the current project directory when switching between projects.
+
+**Workaround**: Use the `/cd` command to manually set the working directory:
+```
+/cd /path/to/your/project
+```
+
+⚠️ **Bug - Requires Restart**: After switching projects in Opencode, you need to **restart Opencode Web UI** for the new working directory to take effect.
+
+**Steps**:
+1. Switch project in Opencode
+2. Quit Opencode completely (Cmd+Q / Ctrl+Q)
+3. Reopen Opencode
+4. Continue chatting
+
+Or use `/cd` command to manually set directory (no restart needed).
+
+For detailed technical analysis, see [TODO-OPENCODE.md](TODO-OPENCODE.md).
+
+### 5. Connect Open WebUI (Optional)
+
+For a full-featured web interface with session management, you can optionally deploy Open WebUI.
 
 #### Deploy Open WebUI with QoderClaw Integration
 
@@ -363,7 +421,7 @@ npm run build
 ./start.sh
 ```
 
-#### Configure Open WebUI Connection
+#### Configure Open WebUI Connection (Optional)
 
 1. Open http://localhost:3001
 2. Create an admin account
@@ -392,7 +450,7 @@ With the QoderClaw integration, Open WebUI provides:
   3. Session is imported into Open WebUI with same ID
   4. Continue chatting - new messages sync to QoderClaw transcript
 
-### 5. Use via Lark/Feishu (Optional)
+### 6. Use via Lark/Feishu (Optional)
 
 Send messages directly to your bot:
 

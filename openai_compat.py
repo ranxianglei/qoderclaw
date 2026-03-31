@@ -229,13 +229,19 @@ async def chat_completions(req: ChatCompletionRequest, request: Request):
                 if resp.status_code == 200:
                     sessions = resp.json()
                     if sessions:
-                        # 找最新的 session（time.created 最大）
-                        latest = max(sessions, key=lambda s: s.get("time", {}).get("created", 0))
+                        # 找最近活跃的 session（time.updated 最大）
+                        # 注意：opencode 切换项目时会更新 directory 和 updated 时间
+                        latest = max(sessions, key=lambda s: s.get("time", {}).get("updated", s.get("time", {}).get("created", 0)))
                         session_workdir = latest.get("directory")
                         opencode_session_id = latest.get("id")
-                        logger.info(f"[openai] 从 opencode API 获取 cwd: {session_workdir} (session={opencode_session_id})")
-                        # 用 opencode session ID 作为 session_key 的一部分，确保不同项目用不同 session
-                        if opencode_session_id:
+                        logger.info(f"[openai] 从 opencode API 获取 cwd: {session_workdir} (session={opencode_session_id}, updated={latest.get('time', {}).get('updated')})")
+                        # session_key 包含 opencode session ID 和目录路径的哈希
+                        # 这样切换项目时会创建新的 Qoder session，避免目录混乱
+                        if opencode_session_id and session_workdir:
+                            import hashlib
+                            dir_hash = hashlib.md5(session_workdir.encode()).hexdigest()[:8]
+                            session_key = f"oc-{opencode_session_id}-{dir_hash}"
+                        elif opencode_session_id:
                             session_key = f"oc-{opencode_session_id}"
         except Exception as e:
             logger.warning(f"[openai] 无法从 opencode API 获取 cwd: {e}")

@@ -2,7 +2,11 @@
 
 [中文文档](README_CN.md)
 
-Multi-platform bridge for [Qoder](https://qoder.com) AI assistant. Connect Qoder to Lark/Feishu bots, web UIs, or any OpenAI-compatible client.
+Multi-platform bridge for [Qoder](https://qoder.com) AI assistant. 
+
+**Key Features:**
+- **Opencode Integration** (Recommended) - Seamless AI coding assistant experience
+- **OpenAI-Compatible API** - Works with any OpenAI-compatible client out of the box
 
 **No public IP required** - Lark/Feishu uses WebSocket for message delivery.
 
@@ -47,28 +51,29 @@ If you prefer to install manually, follow the steps below.
 ## Architecture
 
 ```
-          Lark/Feishu User            Web User (Open WebUI)
-               |                          | HTTP
-          Lark Server                localhost:3001
-               | WebSocket                |
-+---------------------------------------------------------+
-|                    QoderClaw (:8080)                     |
-|                                                         |
-|  +-------------+  +-------------+  +--------------+    |
-|  | Lark Adapter |  | OpenAI API  |  | Management   |    |
-|  | (WebSocket)  |  | /v1/*       |  | API /api/*   |    |
-|  +------+-------+  +------+------+  +--------------+    |
-|         |                 |                              |
-|         +-----------------+                              |
-|                  |                                       |
-|         +--------v----------+                            |
-|         | Session Manager   |                            |
-|         | + ACP Protocol    |                            |
-|         +--------+----------+                            |
-|                  |                                       |
-|            Qoder Process                                 |
-|          (stdin/stdout ACP)                               |
-+---------------------------------------------------------+
+     Opencode User         Lark/Feishu User       Web User (Open WebUI)
+          |                       |                      | HTTP
+     localhost:3000         Lark Server            localhost:3001
+          |                       | WebSocket            |
+          |                       |                      |
++---------|-----------------------|----------------------|----------+
+|         |              QoderClaw (:8080)                      |
+|         |                                                     |
+|  +------v------+  +-------------+  +-------------+  +-------+------+
+|  | Opencode    |  | Lark Adapter |  | OpenAI API  |  | Management  |
+|  | API Client  |  | (WebSocket)  |  | /v1/*       |  | API /api/*  |
+|  +------+------+  +------+-------+  +------+------+  +-------+------+
+|         |                |                |                   |
+|         +----------------+----------------+-------------------+
+|                                       |
+|                              +--------v----------+
+|                              | Session Manager   |
+|                              | + ACP Protocol    |
+|                              +--------+----------+
+|                                       |
+|                               Qoder Process
+|                             (stdin/stdout ACP)
++--------------------------------------------------------------------+
 ```
 
 ## Project Structure
